@@ -16,7 +16,7 @@ function figmaAssetResolver() {
 }
 
 export default defineConfig({
-  // Required for GitHub Pages
+  // Required for GitHub Pages deployment
   base: '/PinPoint-Garage-Connection-Site/',
 
   plugins: [
@@ -29,6 +29,10 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
+  },
+
+  build: {
+    outDir: 'docs',
   },
 
   // File types to support raw imports
