@@ -17,7 +17,7 @@ function figmaAssetResolver() {
 
 export default defineConfig({
   // Required for GitHub Pages deployment
-  base: '/PinPoint-Garage-Connection-Site/',
+  base: './',
 
   plugins: [
     figmaAssetResolver(),
