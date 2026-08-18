@@ -1,3 +1,8 @@
+# PinPoint Garage Connection Site
+
+This repo contains the frontend site built with Vite + React.
+
+Backend scaffold: see `backend/README-backend.md` for run instructions.
 
   # PinPoint Garage Connection Site
 

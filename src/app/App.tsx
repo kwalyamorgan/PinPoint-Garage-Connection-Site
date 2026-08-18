@@ -1,4 +1,8 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
+import { useAuth } from "../lib/auth";
+import api from "../lib/api";
+import AuthDialog from "./components/AuthDialog";
+import ListingDialog from "./components/ListingDialog";
 import {
   MapPin, Wrench, Truck, Car, Bike, Clock, Phone, Mail, ChevronRight,
   Star, Shield, Zap, Search, Menu, X, ArrowRight, CheckCircle, Calendar
@@ -10,21 +14,22 @@ type ServiceTab = "garages" | "mechanics" | "transport" | "car-hire" | "bike-hir
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
-const garages = [
+// fallback static data (used until API responds or if offline)
+const garagesStatic = [
   { name: "Roysambu Auto Hub", rating: 4.9, reviews: 8, distance: "0.8 km", specialty: "Engine & Gearbox", location: "Roysambu", open: true, phone: "+254701123456", img: "/images/garages/roysambu.webp" },
   { name: "Githurai 44 Garage", rating: 4.7, reviews: 7, distance: "1.4 km", specialty: "All Makes & Models", location: "Githurai 44", open: true, phone: "+254701234567", img: "/images/garages/githurai44.webp" },
   { name: "Githurai 45 Motors", rating: 4.8, reviews: 9, distance: "2.1 km", specialty: "Electrical & Diagnostics", location: "Githurai 45", open: false, phone: "+254701345678", img: "/images/garages/githurai45.webp" },
   { name: "Kasarani Tyre & Service", rating: 4.6, reviews: 6, distance: "2.9 km", specialty: "Tyres, Brakes & Suspension", location: "Kasarani", open: true, phone: "+254701456789", img: "/images/garages/kasarani.webp" },
 ];
 
-const mechanics = [
+const mechanicsStatic = [
   { name: "James Mburu", specialty: "BMW & Mercedes Specialist", rating: 5.0, jobs: 8, available: true, location: "USIU Road", phone: "+254701567890" },
   { name: "Amina Hassan", specialty: "Hybrid & EV Technician", rating: 4.9, jobs: 7, available: true, location: "TRM", phone: "+254701678901" },
   { name: "David Otieno", specialty: "Diesel & 4x4 Expert", rating: 4.8, jobs: 10, available: false, location: "Mirema", phone: "+254701789012" },
   { name: "Grace Wairimu", specialty: "Auto Electrician", rating: 4.7, jobs: 6, available: true, location: "Northern Bypass", phone: "+254701890123" },
 ];
 
-const transportServices = [
+const transportStatic = [
   { name: "QuickMove Logistics", type: "Home Shifting", capacity: "Up to 3 bedrooms", price: "From KSh 850", img: "/images/transport/quickmove.svg", area: "USIU Road" },
   { name: "LuggageXpress", type: "Luggage Transfer", capacity: "Airport & hotel runs", price: "From KSh 220", img: "/images/transport/luggagexpress.svg", area: "Kasarani" },
   { name: "OfficeReloc Pro", type: "Office Moves", capacity: "Full office fit-out", price: "From KSh 1 400", img: "/images/transport/officeReloc.svg", area: "Allsops" },
@@ -149,6 +154,42 @@ const locations = [
   "USIU Road",
 ];
 
+const normalizeGarage = (item: any, index: number = 0) => ({
+  id: item?.id ?? `garage-${index}`,
+  name: item?.name ?? `Garage ${index + 1}`,
+  rating: Number(item?.rating ?? 4.7),
+  reviews: Number(item?.reviews ?? 0),
+  distance: item?.distance ?? "Nearby",
+  specialty: item?.specialty ?? item?.service ?? "General service",
+  location: item?.location ?? item?.address ?? "Nairobi",
+  open: item?.open ?? true,
+  phone: item?.phone ?? "+254700000000",
+  img: item?.img ?? "/images/garages/roysambu.webp",
+});
+
+const normalizeMechanic = (item: any, index: number = 0, imageList: string[] = []) => ({
+  id: item?.id ?? `mechanic-${index}`,
+  name: item?.name ?? `Mechanic ${index + 1}`,
+  specialty: item?.specialty ?? item?.service ?? "General repairs",
+  rating: Number(item?.rating ?? 4.8),
+  jobs: Number(item?.jobs ?? 0),
+  available: item?.available ?? true,
+  location: item?.location ?? item?.address ?? item?.garageId ?? "Nairobi",
+  phone: item?.phone ?? "+254700000000",
+  img: item?.img ?? imageList[index % imageList.length] ?? "/images/mechanics/1.webp",
+});
+
+const normalizeTransport = (item: any, index: number = 0) => ({
+  id: item?.id ?? `transport-${index}`,
+  name: item?.name ?? item?.company ?? `Transport ${index + 1}`,
+  type: item?.type ?? item?.service ?? "Moving service",
+  capacity: item?.capacity ?? "Flexible",
+  price: item?.price ?? "From KSh 500",
+  img: item?.img ?? "/images/transport/quickmove.svg",
+  area: item?.area ?? item?.address ?? item?.company ?? "Nairobi",
+  phone: item?.phone ?? "+254700000000",
+});
+
 // ─── Stars ─────────────────────────────────────────────────────────────────────
 function Stars({ rating }: { rating: number }) {
   return (
@@ -175,6 +216,16 @@ export default function App() {
     "/images/mechanics/6.jpg",
   ];
 
+  const [activeTab, setActiveTab] = useState<ServiceTab>("garages");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedLocation, setSelectedLocation] = useState<string>("");
+  const [garagesState, setGaragesState] = useState<any[]>(garagesStatic);
+  const [mechanicsState, setMechanicsState] = useState<any[]>(mechanicsStatic);
+  const [transportState, setTransportState] = useState<any[]>(transportStatic);
+  const [authOpen, setAuthOpen] = useState(false);
+  const [listingOpen, setListingOpen] = useState(false);
+
   const mechanicsWithImages = useMemo(() => {
     // Fisher-Yates shuffle
     const imgs = [...mechanicImages];
@@ -182,13 +233,34 @@ export default function App() {
       const j = Math.floor(Math.random() * (i + 1));
       [imgs[i], imgs[j]] = [imgs[j], imgs[i]];
     }
-    return mechanics.map((m, idx) => ({ ...m, img: imgs[idx % imgs.length] }));
-  }, []);
+    return mechanicsState.map((m, idx) => ({ ...m, img: imgs[idx % imgs.length] }));
+  }, [mechanicsState]);
 
-  const [activeTab, setActiveTab] = useState<ServiceTab>("garages");
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedLocation, setSelectedLocation] = useState<string>("");
+  // auth
+  const auth = useAuth();
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const g = await api.fetchGarages();
+        const m = await api.fetchMechanics();
+        const t = await api.fetchTransport();
+        if (!mounted) return;
+
+        const nextGarages = Array.isArray(g) ? g.map((item, index) => normalizeGarage(item, index)) : garagesStatic;
+        const nextMechanics = Array.isArray(m) ? m.map((item, index) => normalizeMechanic(item, index, mechanicImages)) : mechanicsStatic;
+        const nextTransport = Array.isArray(t) ? t.map((item, index) => normalizeTransport(item, index)) : transportStatic;
+
+        setGaragesState(nextGarages);
+        setMechanicsState(nextMechanics);
+        setTransportState(nextTransport);
+      } catch (err) {
+        console.warn('API fetch failed, using static data', err);
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
 
   const normalizedQuery = searchQuery.trim().toLowerCase();
   const hasFilter = Boolean(normalizedQuery || selectedLocation);
@@ -196,18 +268,18 @@ export default function App() {
   const filterLocation = (location?: string) => !selectedLocation || location === selectedLocation;
 
   const filteredGarages = useMemo(
-    () => garages.filter((g) => filterLocation(g.location) && (filterText(g.name) || filterText(g.specialty) || filterText(g.location))),
-    [searchQuery, selectedLocation]
+    () => garagesState.filter((g) => filterLocation(g.location) && (filterText(g.name) || filterText(g.specialty) || filterText(g.location))),
+    [garagesState, searchQuery, selectedLocation]
   );
 
   const filteredMechanics = useMemo(
-    () => mechanicsWithImages.filter((m) => filterLocation(m.location) && (filterText(m.name) || filterText(m.specialty) || filterText(m.location))),
-    [searchQuery, selectedLocation, mechanicsWithImages]
+    () => mechanicsState.filter((m) => filterLocation(m.location) && (filterText(m.name) || filterText(m.specialty) || filterText(m.location))),
+    [mechanicsState, searchQuery, selectedLocation]
   );
 
   const filteredTransport = useMemo(
-    () => transportServices.filter((t) => filterLocation(t.area) && (filterText(t.name) || filterText(t.type) || filterText(t.area))),
-    [searchQuery, selectedLocation]
+    () => transportState.filter((t) => filterLocation(t.area) && (filterText(t.name) || filterText(t.type) || filterText(t.area))),
+    [transportState, searchQuery, selectedLocation]
   );
 
   const filteredCars = useMemo(
@@ -220,9 +292,9 @@ export default function App() {
     [searchQuery, selectedLocation]
   );
 
-  const activeGarages = hasFilter ? filteredGarages : garages;
+  const activeGarages = hasFilter ? filteredGarages : garagesState;
   const activeMechanics = hasFilter ? filteredMechanics : mechanicsWithImages;
-  const activeTransport = hasFilter ? filteredTransport : transportServices;
+  const activeTransport = hasFilter ? filteredTransport : transportState;
   const activeCars = hasFilter ? filteredCars : carHire;
   const activeBikes = hasFilter ? filteredBikes : bikeHire;
 
@@ -268,8 +340,15 @@ export default function App() {
           </div>
 
           <div className="hidden md:flex items-center gap-3">
-            <button className="text-sm text-muted-foreground hover:text-foreground transition-colors px-4 py-2">Sign In</button>
-            <button className="text-sm bg-primary text-white font-semibold px-5 py-2 rounded hover:bg-[#e04a00] transition-colors">
+            {auth.user ? (
+              <>
+                <button className="text-sm text-muted-foreground hover:text-foreground transition-colors px-4 py-2">Hi {auth.user.email}</button>
+                <button onClick={async () => { await auth.logout(); }} className="text-sm text-muted-foreground hover:text-foreground transition-colors px-4 py-2">Log Out</button>
+              </>
+            ) : (
+              <button onClick={() => setAuthOpen(true)} className="text-sm text-muted-foreground hover:text-foreground transition-colors px-4 py-2">Sign In</button>
+            )}
+            <button onClick={() => { if (!auth.user) { setAuthOpen(true); return; } setListingOpen(true); }} className="text-sm bg-primary text-white font-semibold px-5 py-2 rounded hover:bg-[#e04a00] transition-colors">
               List Your Service
             </button>
           </div>
@@ -298,6 +377,14 @@ export default function App() {
           </div>
         )}
       </nav>
+
+      <AuthDialog auth={auth} open={authOpen} onOpenChange={setAuthOpen} onSuccess={() => auth.refresh && auth.refresh()} />
+      <ListingDialog open={listingOpen} onOpenChange={setListingOpen} onCreated={(item) => {
+        if (!item) return;
+        if (item.specialty || item.garageId) setMechanicsState((s) => [item, ...s]);
+        else if (item.type || item.company) setTransportState((s) => [item, ...s]);
+        else setGaragesState((s) => [item, ...s]);
+      }} />
 
       {/* ── HERO ────────────────────────────────────────────────────────────── */}
       <section className="relative pt-16 overflow-hidden">
@@ -703,17 +790,43 @@ export default function App() {
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {[
-              { icon: <Shield size={24} className="text-primary" />, title: "Verified Providers", body: "Every garage, mechanic, and transport operator is background-checked and regularly reviewed by real customers." },
-              { icon: <Zap size={24} className="text-primary" />, title: "Instant Booking", body: "No phone tag. Book a service slot or a vehicle in under 60 seconds and get an immediate confirmation." },
-              { icon: <MapPin size={24} className="text-primary" />, title: "Hyper-Local Matches", body: "We surface providers closest to you first, so your bike is ready down the road, not across town." },
-              { icon: <Clock size={24} className="text-primary" />, title: "Flexible Hire Terms", body: "Bikes by the hour, cars by the day, trucks by the job — no rigid packages, just what you actually need." },
-              { icon: <Star size={24} className="text-primary" />, title: "Community Ratings", body: "Hundreds of verified reviews on every listing. Ratings affect visibility — the best rise to the top." },
-              { icon: <Phone size={24} className="text-primary" />, title: "24/7 Support", body: "Broke down at midnight? Our support team is live around the clock to get you moving again." },
+              {
+                title: "Verified Providers",
+                image: "https://images.unsplash.com/photo-1556740749-887f6717d7e4?auto=format&fit=crop&w=900&q=80",
+                body: "Every garage, mechanic, and transport operator is background-checked and regularly reviewed by real customers.",
+              },
+              {
+                title: "Instant Booking",
+                image: "https://images.unsplash.com/photo-1520607162513-77705c0f0d4a?auto=format&fit=crop&w=900&q=80",
+                body: "No phone tag. Book a service slot or vehicle in under 60 seconds and get an immediate confirmation.",
+              },
+              {
+                title: "Hyper-Local Matches",
+                image: "https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=900&q=80",
+                body: "We surface providers closest to you first so your bike is ready down the road, not across town.",
+              },
+              {
+                title: "Flexible Hire Terms",
+                image: "https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=900&q=80",
+                body: "Bikes by the hour, cars by the day, trucks by the job — no rigid packages, just what you actually need.",
+              },
+              {
+                title: "Community Ratings",
+                image: "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=900&q=80",
+                body: "Hundreds of verified reviews on every listing. Ratings affect visibility — the best rise to the top.",
+              },
+              {
+                title: "24/7 Support",
+                image: "https://images.unsplash.com/photo-1581092580497-e0d23cbdf1dc?auto=format&fit=crop&w=900&q=80",
+                body: "Broke down at midnight? Our support team is live around the clock to get you moving again.",
+              },
             ].map((f) => (
-              <div key={f.title} className="bg-card border border-border rounded p-6 hover:border-primary/30 transition-colors">
-                <div className="mb-4">{f.icon}</div>
-                <h3 className="font-bold text-foreground text-base mb-2">{f.title}</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">{f.body}</p>
+              <div key={f.title} className="overflow-hidden rounded-xl border border-border bg-card shadow-sm transition-colors hover:border-primary/30">
+                <img src={f.image} alt={f.title} className="h-48 w-full object-cover" />
+                <div className="p-5">
+                  <h3 className="font-bold text-foreground text-base mb-2">{f.title}</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{f.body}</p>
+                </div>
               </div>
             ))}
           </div>

@@ -1,0 +1,11 @@
+{
+  "garages": [
+    { "id": "g1", "name": "Main Garage", "address": "123 Road St", "phone": "555-0100" }
+  ],
+  "mechanics": [
+    { "id": "m1", "name": "Alex Mechanic", "garageId": "g1", "specialty": "brakes" }
+  ],
+  "transport": [
+    { "id": "t1", "type": "taxi", "company": "City Taxis", "phone": "555-0200" }
+  ]
+}
