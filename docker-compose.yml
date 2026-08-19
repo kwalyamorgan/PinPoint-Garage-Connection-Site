@@ -24,7 +24,7 @@ services:
       - DATABASE_URL=postgresql://pinpoint_user:mmmm@postgres:5432/pinpoint
       - ADMIN_EMAIL=admin@example.com
       - ADMIN_PASSWORD=secret123
-      - FRONTEND_ORIGIN=http://localhost:5173,https://kwalyamorgan.github.io/PinPoint-Garage-Connection-Site/
+      - FRONTEND_ORIGIN=http://localhost:5173,https://kwalyamorgan.github.io
       - NODE_ENV=development
       - START_FRONTEND=false
     ports:
