@@ -58,3 +58,18 @@ VITE_GOOGLE_CLIENT_ID=replace-with-your-google-web-client-id.apps.googleusercont
 - Set `NODE_ENV=production`, `START_FRONTEND=false`, and the real comma-separated `FRONTEND_ORIGIN` values.
 - Use a verified production Brevo sender and production Google origin.
 - Keep `backend/.env` out of source control and secret managers' logs.
+
+## GitHub Pages frontend + separate backend
+
+If your frontend is deployed on GitHub Pages and backend runs elsewhere (for example Render), set the following:
+
+1. In GitHub repository settings, create Actions secret `VITE_API_BASE`.
+2. Set it to your backend API base URL including `/api`.
+	- Example: `https://your-backend.onrender.com/api`
+3. Optional: create repository variable `VITE_APP_URL` with your frontend URL.
+	- Example: `https://<username>.github.io/<repo>`
+4. In backend environment, set `FRONTEND_ORIGIN` to include your GitHub Pages origin.
+	- Example: `https://<username>.github.io`
+	- If you use a custom domain, include that domain too.
+
+The GitHub Pages workflow now fails fast if `VITE_API_BASE` is missing, so production builds never deploy with `localhost` API endpoints.
