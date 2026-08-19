@@ -31,13 +31,13 @@ export function useAuth() {
 
   async function register(email: string, password: string, role = 'user') {
     const r = await api.register(email, password, role);
-    if (r && r.success) return true;
+    if (r && r.ok && r.success) return { ok: true as const };
     if (r && r.user) {
       const meRes = await api.me();
       setUser(meRes.user ?? null);
-      return true;
+      return { ok: true as const };
     }
-    return false;
+    return { ok: false as const, error: r?.error || 'Registration failed', status: r?.status };
   }
 
   async function registerWithOTP(email: string, password: string, otp: string, role = 'user') {

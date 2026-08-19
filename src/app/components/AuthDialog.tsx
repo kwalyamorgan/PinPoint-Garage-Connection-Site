@@ -245,11 +245,16 @@ export default function AuthDialog({ auth, open, onOpenChange, onSuccess }: { au
     e?.preventDefault();
     setError(null);
     if (!email || !password) { setError('Email and password are required'); return; }
+    if (password !== confirmPassword) { setError('Passwords do not match'); return; }
     setLoading(true);
     try {
-      const ok = await auth.register(email, password, role);
-      if (!ok) {
-        setError('Registration failed');
+      const result = await auth.register(email, password, role);
+      if (!result?.ok) {
+        if (result?.status === 409) {
+          setError(result.error || 'This email already exists. Please sign in instead.');
+          return;
+        }
+        setError(result?.error || 'Registration failed');
         return;
       }
       setSuccess('Account created. Please sign in now.');

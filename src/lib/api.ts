@@ -83,7 +83,8 @@ export async function register(email: string, password: string, role = 'user') {
     credentials: 'include',
     body: JSON.stringify({ email, password, role }),
   });
-  return res.json();
+  const body = await res.json();
+  return { ok: res.ok, status: res.status, ...body };
 }
 
 export async function login(email: string, password: string, adminOnly = false) {
