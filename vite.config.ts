@@ -18,7 +18,7 @@ function figmaAssetResolver() {
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
 
-  // Keep local dev at root. GitHub Pages build should set VITE_BASE_PATH=/repo-name/
+  // Render serves the frontend from the site root; override this only for a subpath deployment.
   const base = env.VITE_BASE_PATH || '/'
 
   return {

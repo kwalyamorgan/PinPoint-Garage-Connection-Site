@@ -65,17 +65,13 @@ VITE_API_BASE=http://localhost:4000/api VITE_API_URL=http://localhost:4000/api n
 - Use a verified production Brevo sender and production Google origin.
 - Keep `backend/.env` out of source control and secret managers' logs.
 
-## GitHub Pages frontend + separate backend
+## Render frontend + separate backend
 
-If your frontend is deployed on GitHub Pages and backend runs elsewhere (for example Render), set the following:
+For a Render static site and Render web service:
 
-1. In GitHub repository settings, create Actions secret `VITE_API_BASE`.
-2. Set it to your backend API base URL including `/api`.
-	- Example: `https://your-backend.onrender.com/api`
-3. Optional: create repository variable `VITE_APP_URL` with your frontend URL.
-	- Example: `https://<username>.github.io/<repo>`
-4. In backend environment, set `FRONTEND_ORIGIN` to include your GitHub Pages origin.
-	- Example: `https://<username>.github.io`
-	- If you use a custom domain, include that domain too.
+1. Set the frontend Render environment variable `VITE_API_BASE` to the backend URL including `/api`, for example `https://your-backend.onrender.com/api`.
+2. Set `VITE_APP_URL` to the frontend URL, for example `https://your-frontend.onrender.com`.
+3. Use `npm run build` as the frontend build command and `docs` as the publish directory.
+4. Set the backend `FRONTEND_ORIGIN` to the exact frontend origin, without a trailing slash.
 
-The GitHub Pages workflow now fails fast if `VITE_API_BASE` is missing, so production builds never deploy with `localhost` API endpoints.
+Frontend `VITE_*` values are embedded at build time. Backend secrets must be configured only in the backend Render service environment.
