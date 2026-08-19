@@ -8,6 +8,9 @@ import mechanicsRouter from './routes/mechanics';
 import transportRouter from './routes/transport';
 import imagesRouter from './routes/images';
 import authRouter from './routes/auth';
+import providerRouter from './routes/provider';
+import customerRouter from './routes/customer';
+import adminRouter from './routes/admin';
 import { spawn } from 'child_process';
 import os from 'os';
 
@@ -23,7 +26,7 @@ app.get('/', (_req, res) => {
   res.json({
     name: 'PinPoint Garage Connection Site API',
     status: 'ok',
-    endpoints: ['/api/garages', '/api/mechanics', '/api/transport', '/api/images', '/api/auth'],
+    endpoints: ['/api/garages', '/api/mechanics', '/api/transport', '/api/images', '/api/auth', '/api/provider', '/api/customer'],
   });
 });
 
@@ -36,6 +39,9 @@ app.use('/api/mechanics', mechanicsRouter);
 app.use('/api/transport', transportRouter);
 app.use('/api/images', imagesRouter);
 app.use('/api/auth', authRouter);
+app.use('/api/provider', providerRouter);
+app.use('/api/customer', customerRouter);
+app.use('/api/admin', adminRouter);
 
 // serve workspace images folder
 app.use('/images', express.static(path.join(__dirname, '..', '..', 'images')));

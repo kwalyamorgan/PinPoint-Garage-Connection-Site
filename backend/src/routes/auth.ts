@@ -3,14 +3,56 @@ import db, { isDbReady } from '../db';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import * as SibApiV3Sdk from 'sib-api-v3-sdk';
 
 const router = Router();
 
 const JWT_SECRET = process.env.JWT_SECRET || 'change-this-secret';
 const COOKIE_NAME = process.env.COOKIE_NAME || 'pinpoint_token';
+const BREVO_API_KEY = process.env.BREVO_API_KEY || '';
+
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID || '';
 const OTP_EXPIRY_MINUTES = parseInt(process.env.OTP_EXPIRY_MINUTES || '10');
 const RESET_TOKEN_EXPIRY_HOURS = parseInt(process.env.RESET_TOKEN_EXPIRY_HOURS || '1');
+const FROM_EMAIL = process.env.FROM_EMAIL || 'noreply@pinpoint.com';
+const FROM_NAME = process.env.FROM_NAME || 'PinPoint';
+
+// Brevo email helper
+async function sendEmailViaBrevo(email: string, subject: string, code: string) {
+  if (!BREVO_API_KEY) {
+    console.warn('Brevo API key not configured. Reset code:', code);
+    return false;
+  }
+
+  try {
+    const defaultClient = SibApiV3Sdk.ApiClient.instance;
+    const apiKey = defaultClient.authentications['api-key'];
+    if (apiKey) {
+      apiKey.apiKey = BREVO_API_KEY;
+    }
+
+    const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
+    const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
+    sendSmtpEmail.subject = subject;
+    sendSmtpEmail.htmlContent = `
+      <h2>Password Reset Request</h2>
+      <p>You requested a password reset. Your reset code is:</p>
+      <h3 style="background: #f0f0f0; padding: 10px; border-radius: 5px; font-family: monospace;">${code}</h3>
+      <p>This code expires in 1 hour.</p>
+      <p>If you did not request this, please ignore this email.</p>
+      <p>PinPoint Team</p>
+    `;
+    sendSmtpEmail.sender = { name: FROM_NAME, email: FROM_EMAIL };
+    sendSmtpEmail.to = [{ email: email }];
+
+    await apiInstance.sendTransacEmail(sendSmtpEmail);
+    console.log(`Password reset email sent to ${email}`);
+    return true;
+  } catch (err: any) {
+    console.error('Failed to send Brevo email:', err?.response?.body || err?.message || err);
+    return false;
+  }
+}
 
 async function verifyGoogleIdToken(idToken: string) {
   if (!idToken) throw new Error('idToken is required');
@@ -92,7 +134,7 @@ router.post('/register-with-otp', async (req, res) => {
   
   try {
     const otpRecord = await db.query(
-      'SELECT code, expiresAt FROM otp_codes WHERE email = $1 AND type = $2 ORDER BY createdAt DESC LIMIT 1',
+      'SELECT code, expiresAt AS "expiresAt" FROM otp_codes WHERE email = $1 AND type = $2 ORDER BY createdAt DESC LIMIT 1',
       [email, 'register']
     );
     
@@ -109,7 +151,7 @@ router.post('/register-with-otp', async (req, res) => {
     const hash = bcrypt.hashSync(password, 10);
     const r = role === 'lister' ? 'lister' : 'user';
     
-    await db.query('INSERT INTO users (id, email, passwordHash, role) VALUES ($1, $2, $3, $4)', [id, email, hash, r]);
+    await db.query('INSERT INTO users (id, email, passwordHash, role, providerApproved, providerEnabled) VALUES ($1, $2, $3, $4, $5, $6)', [id, email, hash, r, r !== 'lister', true]);
     
     // Mark OTP as used
     await db.query('DELETE FROM otp_codes WHERE email = $1 AND type = $2', [email, 'register']);
@@ -133,21 +175,28 @@ router.post('/register', async (req, res) => {
   const id = `u${Date.now()}`;
   const hash = bcrypt.hashSync(password, 10);
   const r = role === 'lister' ? 'lister' : 'user';
-  await db.query('INSERT INTO users (id,email,passwordHash,role) VALUES ($1,$2,$3,$4)', [id, email, hash, r]);
-  const token = jwt.sign({ id, email, role: r }, JWT_SECRET, { expiresIn: '7d' });
-  setTokenCookie(res, token);
-  res.json({ user: { id, email, role: r } });
+  await db.query('INSERT INTO users (id,email,passwordHash,role,providerApproved,providerEnabled) VALUES ($1,$2,$3,$4,$5,$6)', [id, email, hash, r, r !== 'lister', true]);
+  res.json({ success: true, message: 'Account created. Please sign in now.' });
 });
 
 router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
+  const { email, password, adminOnly = false } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'email and password required' });
   if (!isDbReady()) return res.status(503).json({ error: 'Database unavailable. Start PostgreSQL and configure DATABASE_URL.' });
+
   const r = await db.query('SELECT id,email,passwordHash,role FROM users WHERE email = $1', [email]);
   const row = r.rows[0];
   if (!row) return res.status(401).json({ error: 'Invalid credentials' });
-  const ok = bcrypt.compareSync(password, row.passwordhash || row.passwordHash || row.passwordHash);
+  if ((adminOnly && row.role !== 'admin') || (!adminOnly && row.role === 'admin')) {
+    return res.status(401).json({ error: 'Invalid credentials' });
+  }
+
+  const storedHash = typeof row.passwordhash === 'string' ? row.passwordhash : typeof row.passwordHash === 'string' ? row.passwordHash : '';
+  if (!storedHash) return res.status(401).json({ error: 'Invalid credentials' });
+
+  const ok = bcrypt.compareSync(password, storedHash);
   if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
+
   const token = jwt.sign({ id: row.id, email: row.email, role: row.role }, JWT_SECRET, { expiresIn: '7d' });
   setTokenCookie(res, token);
   res.json({ user: { id: row.id, email: row.email, role: row.role } });
@@ -160,26 +209,44 @@ router.post('/forgot-password', async (req, res) => {
   if (!isDbReady()) return res.status(503).json({ error: 'Database unavailable. Start PostgreSQL and configure DATABASE_URL.' });
   
   try {
-    const userResult = await db.query('SELECT id FROM users WHERE email = $1', [email]);
+    const userResult = await db.query('SELECT id, role FROM users WHERE email = $1', [email]);
+    
+    // Don't reveal if user exists
     if (userResult.rowCount === 0) {
-      // Don't reveal if user exists
-      return res.json({ success: true, message: 'If email exists, password reset link sent' });
+      return res.json({ success: true, message: 'If email exists, password reset code sent' });
+    }
+
+    const user = userResult.rows[0];
+    
+    // Exclude admin users from password reset
+    if (user.role === 'admin') {
+      return res.json({ success: true, message: 'If email exists, password reset code sent' });
     }
     
-    const user = userResult.rows[0];
-    const resetToken = generateResetToken();
+    // Generate a 6-digit code
+    const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = new Date(Date.now() + RESET_TOKEN_EXPIRY_HOURS * 60 * 60 * 1000);
     
+    // Store reset code in database
     await db.query(
       'INSERT INTO password_reset_tokens (userId, token, expiresAt) VALUES ($1, $2, $3)',
-      [user.id, resetToken, expiresAt]
+      [user.id, resetCode, expiresAt]
     );
     
-    // In production, send email with reset link
-    console.log(`Password reset token for ${email}: ${resetToken}`);
+    // Send email via Brevo
+    const emailSent = await sendEmailViaBrevo(
+      email,
+      'Your PinPoint Password Reset Code',
+      resetCode
+    );
+
+    if (!emailSent) {
+      return res.status(500).json({ error: 'Unable to send password reset email right now. Please try again later.' });
+    }
     
-    res.json({ success: true, message: 'If email exists, password reset link sent' });
+    res.json({ success: true, message: 'If email exists, password reset code sent' });
   } catch (err) {
+    console.error('Forgot password error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -192,7 +259,7 @@ router.post('/reset-password', async (req, res) => {
   
   try {
     const tokenResult = await db.query(
-      'SELECT userId, expiresAt FROM password_reset_tokens WHERE token = $1',
+      'SELECT userId AS "userId", expiresAt AS "expiresAt" FROM password_reset_tokens WHERE token = $1',
       [token]
     );
     
@@ -214,6 +281,50 @@ router.post('/reset-password', async (req, res) => {
   }
 });
 
+router.post('/google-register', async (req, res) => {
+  const { email, googleId, name, role } = req.body;
+  if (!email || !googleId) return res.status(400).json({ error: 'email and googleId required' });
+  if (!isDbReady()) return res.status(503).json({ error: 'Database unavailable. Start PostgreSQL and configure DATABASE_URL.' });
+
+  try {
+    const normalizedRole = role === 'lister' ? 'lister' : 'user';
+    const byGoogleId = await db.query('SELECT id, email, role, googleId, passwordHash FROM users WHERE googleId = $1', [googleId]);
+    if (byGoogleId.rowCount && byGoogleId.rows[0]) {
+      const existingUser = byGoogleId.rows[0];
+      if (existingUser.role !== normalizedRole) {
+        await db.query('UPDATE users SET role = $1 WHERE id = $2', [normalizedRole, existingUser.id]);
+      }
+      return res.json({ success: true, message: 'Account ready. Please sign in now.' });
+    }
+
+    const byEmail = await db.query('SELECT id, email, role, googleId, passwordHash FROM users WHERE email = $1', [email]);
+    if (byEmail.rowCount && byEmail.rows[0]) {
+      const existingUser = byEmail.rows[0];
+      const existingGoogleId = existingUser.googleId ?? existingUser.googleid;
+      if (!existingGoogleId && (existingUser.passwordhash || existingUser.passwordHash)) {
+        return res.status(409).json({ error: 'This email already exists. Please sign in with your email and password instead.' });
+      }
+      if (!existingGoogleId) {
+        await db.query('UPDATE users SET googleId = $1, role = $2, providerApproved = $3 WHERE id = $4', [googleId, normalizedRole, normalizedRole !== 'lister', existingUser.id]);
+        return res.json({ success: true, message: 'Account ready. Please sign in now.' });
+      }
+    }
+
+    const id = `u${Date.now()}`;
+    const generatedPassword = `google-oauth:${email}:${id}`;
+    const placeholderHash = bcrypt.hashSync(generatedPassword, 10);
+    await db.query(
+      'INSERT INTO users (id, email, passwordHash, role, googleId, providerApproved, providerEnabled) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+      [id, email, placeholderHash, normalizedRole, googleId, normalizedRole !== 'lister', true]
+    );
+
+    res.json({ success: true, message: 'Account created. Please sign in now.' });
+  } catch (err) {
+    console.error('Google registration failed:', err);
+    res.status(500).json({ error: 'Google registration failed' });
+  }
+});
+
 // Google OAuth callback (simplified)
 router.post('/google-login', async (req, res) => {
   const { idToken, credential, email, googleId, name } = req.body;
@@ -232,22 +343,37 @@ router.post('/google-login', async (req, res) => {
       return res.status(400).json({ error: 'email and googleId required' });
     }
 
-    let userResult = await db.query(
-      'SELECT id, email, role, googleId FROM users WHERE email = $1 OR googleId = $2',
-      [authEmail, authGoogleId]
+    const userByGoogleId = await db.query(
+      'SELECT id, email, role, googleId, passwordHash FROM users WHERE googleId = $1',
+      [authGoogleId]
     );
-    let user = userResult.rows[0];
+    let user = userByGoogleId.rows[0];
 
     if (!user) {
-      const id = `u${Date.now()}`;
-      await db.query(
-        'INSERT INTO users (id, email, passwordHash, role, googleId) VALUES ($1, $2, $3, $4, $5)',
-        [id, authEmail, '', 'user', authGoogleId]
+      const sameEmailUser = await db.query(
+        'SELECT id, email, role, googleId, passwordHash FROM users WHERE email = $1',
+        [authEmail]
       );
-      user = { id, email: authEmail, role: 'user', googleid: authGoogleId };
-    } else if (!user.googleid) {
+
+      const sameEmailGoogleId = sameEmailUser.rows[0]?.googleId ?? sameEmailUser.rows[0]?.googleid;
+      if (sameEmailUser.rowCount && sameEmailUser.rows[0] && !sameEmailGoogleId && (sameEmailUser.rows[0].passwordhash || sameEmailUser.rows[0].passwordHash)) {
+        return res.status(409).json({
+          error: 'This email is already registered. Please sign in with your email and password.'
+        });
+      }
+
+      return res.json({
+        requiresRegistration: true,
+        email: authEmail,
+        googleId: authGoogleId,
+        name: authName,
+        message: 'Google account not found. Please choose a role to sign up.'
+      });
+    }
+
+    if (!(user.googleId ?? user.googleid)) {
       await db.query('UPDATE users SET googleId = $1 WHERE id = $2', [authGoogleId, user.id]);
-      user.googleid = authGoogleId;
+      user.googleId = authGoogleId;
     }
 
     const authRole = user.role || 'user';

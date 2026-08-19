@@ -12,6 +12,9 @@ const mechanics_1 = __importDefault(require("./routes/mechanics"));
 const transport_1 = __importDefault(require("./routes/transport"));
 const images_1 = __importDefault(require("./routes/images"));
 const auth_1 = __importDefault(require("./routes/auth"));
+const provider_1 = __importDefault(require("./routes/provider"));
+const customer_1 = __importDefault(require("./routes/customer"));
+const admin_1 = __importDefault(require("./routes/admin"));
 const child_process_1 = require("child_process");
 dotenv_1.default.config();
 const app = (0, express_1.default)();
@@ -22,7 +25,7 @@ app.get('/', (_req, res) => {
     res.json({
         name: 'PinPoint Garage Connection Site API',
         status: 'ok',
-        endpoints: ['/api/garages', '/api/mechanics', '/api/transport', '/api/images', '/api/auth'],
+        endpoints: ['/api/garages', '/api/mechanics', '/api/transport', '/api/images', '/api/auth', '/api/provider', '/api/customer'],
     });
 });
 app.get('/.well-known/appspecific/com.chrome.devtools.json', (_req, res) => {
@@ -33,6 +36,9 @@ app.use('/api/mechanics', mechanics_1.default);
 app.use('/api/transport', transport_1.default);
 app.use('/api/images', images_1.default);
 app.use('/api/auth', auth_1.default);
+app.use('/api/provider', provider_1.default);
+app.use('/api/customer', customer_1.default);
+app.use('/api/admin', admin_1.default);
 // serve workspace images folder
 app.use('/images', express_1.default.static(path_1.default.join(__dirname, '..', '..', 'images')));
 const PORT = process.env.PORT || 4000;

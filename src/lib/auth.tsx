@@ -18,19 +18,20 @@ export function useAuth() {
     return () => { mounted = false; };
   }, []);
 
-  async function login(email: string, password: string) {
-    const r = await api.login(email, password);
+  async function login(email: string, password: string, adminOnly = false) {
+    const r = await api.login(email, password, adminOnly);
     if (r && r.user) {
       // user is returned and cookie is set by server
       const meRes = await api.me();
       setUser(meRes.user ?? null);
-      return true;
+      return meRes.user ?? false;
     }
     return false;
   }
 
   async function register(email: string, password: string, role = 'user') {
     const r = await api.register(email, password, role);
+    if (r && r.success) return true;
     if (r && r.user) {
       const meRes = await api.me();
       setUser(meRes.user ?? null);
@@ -53,14 +54,22 @@ export function useAuth() {
     return await api.requestOTPRegister(email);
   }
 
-  async function loginWithGoogle(idToken: string, email: string, googleId: string, name?: string) {
-    const r = await api.googleLogin(idToken, email, googleId, name);
+  async function loginWithGoogle(idToken: string, email: string, googleId: string, name?: string, role?: 'user' | 'lister') {
+    const r = await api.googleLogin(idToken, email, googleId, name, role);
     if (r && r.user) {
       const meRes = await api.me();
       setUser(meRes.user ?? null);
-      return true;
+      return { ok: true, requiresRegistration: false };
     }
-    return false;
+    if (r && r.requiresRegistration) {
+      return { ok: false, requiresRegistration: true, email: r.email, googleId: r.googleId, name: r.name };
+    }
+    return { ok: false, requiresRegistration: false };
+  }
+
+  async function googleRegister(email: string, googleId: string, name?: string, role: 'user' | 'lister' = 'user') {
+    const r = await api.googleRegister(email, googleId, name, role);
+    return !!(r && r.success);
   }
 
   async function logout() {
@@ -73,5 +82,5 @@ export function useAuth() {
     setUser(r.user ?? null);
   }
 
-  return { user, login, logout, register, refresh, registerWithOTP, requestOTPRegister, loginWithGoogle };
+  return { user, login, logout, register, refresh, registerWithOTP, requestOTPRegister, loginWithGoogle, googleRegister };
 }
