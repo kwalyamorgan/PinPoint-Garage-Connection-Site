@@ -49,7 +49,13 @@ VITE_APP_NAME=PinPoint Garage Connection
 VITE_GOOGLE_CLIENT_ID=replace-with-your-google-web-client-id.apps.googleusercontent.com
 ```
 
-`VITE_API_URL` is used by the password-reset dialog, while the rest of the API client uses `VITE_API_BASE`. Vite variables are public at build time, so never place Brevo, Cloudinary secrets, database passwords, or `JWT_SECRET` in them.
+The frontend uses `VITE_API_BASE` for all API requests. Vite variables are public at build time, so never place Brevo, Cloudinary secrets, database passwords, or `JWT_SECRET` in them.
+
+Development currently targets the Render backend through `.env.development`. To test against a local backend instead, run:
+
+```bash
+VITE_API_BASE=http://localhost:4000/api VITE_API_URL=http://localhost:4000/api npm run dev
+```
 
 ## Production checklist
 

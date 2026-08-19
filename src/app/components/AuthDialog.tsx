@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Mail, Lock, Loader } from 'lucide-react';
+import { API_BASE } from '../../lib/api';
 
 type AuthMode = 'login' | 'register' | 'register-otp' | 'otp-verify' | 'forgot-password' | 'reset-password-code' | 'google-role';
 
@@ -288,7 +289,7 @@ export default function AuthDialog({ auth, open, onOpenChange, onSuccess }: { au
     if (!email) { setError('Email is required'); return; }
     setLoading(true);
     try {
-      const result = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:4000/api'}/auth/forgot-password`, {
+      const result = await fetch(`${API_BASE}/auth/forgot-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -312,7 +313,7 @@ export default function AuthDialog({ auth, open, onOpenChange, onSuccess }: { au
     if (password !== confirmPassword) { setError('Passwords do not match'); return; }
     setLoading(true);
     try {
-      const result = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:4000/api'}/auth/reset-password`, {
+      const result = await fetch(`${API_BASE}/auth/reset-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
