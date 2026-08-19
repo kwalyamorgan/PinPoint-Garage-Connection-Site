@@ -94,7 +94,8 @@ export async function login(email: string, password: string, adminOnly = false) 
     credentials: 'include',
     body: JSON.stringify({ email, password, adminOnly }),
   });
-  return res.json();
+  const body = await res.json();
+  return { ok: res.ok, status: res.status, ...body };
 }
 
 export async function me() {
