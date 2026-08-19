@@ -16,7 +16,7 @@ The backend creates its tables on startup. `ADMIN_EMAIL` and `ADMIN_PASSWORD` se
 
 1. Open [Google Cloud Console](https://console.cloud.google.com/), create or select a project, and configure the OAuth consent screen.
 2. Create an OAuth client under **APIs & Services > Credentials > Create credentials > OAuth client ID**.
-3. Select **Web application** and add the frontend origins to **Authorized JavaScript origins**: `http://localhost:5173` for local development and the production site origin for deployment.
+3. Select **Web application** and add the frontend origin to **Authorized JavaScript origins**: `http://localhost:5173`.
 4. Put the resulting web client ID in both `GOOGLE_CLIENT_ID` in `backend/.env` and `VITE_GOOGLE_CLIENT_ID` in the frontend `.env`.
 
 This application verifies Google Identity Services ID tokens; it does not use a Google client secret or an OAuth redirect URI. Do not put a client secret in frontend variables.
@@ -51,27 +51,25 @@ VITE_GOOGLE_CLIENT_ID=replace-with-your-google-web-client-id.apps.googleusercont
 
 The frontend uses `VITE_API_BASE` for all API requests. Vite variables are public at build time, so never place Brevo, Cloudinary secrets, database passwords, or `JWT_SECRET` in them.
 
-Development currently targets the Render backend through `.env.development`. To test against a local backend instead, run:
+Local development command:
 
 ```bash
 VITE_API_BASE=http://localhost:4000/api VITE_API_URL=http://localhost:4000/api npm run dev
 ```
 
-## Production checklist
+## Optional Render deployment
 
-- Use a managed PostgreSQL connection string with TLS as required by the provider.
-- Generate a unique, high-entropy `JWT_SECRET` and strong admin password.
-- Set `NODE_ENV=production`, `START_FRONTEND=false`, and the real comma-separated `FRONTEND_ORIGIN` values.
-- Use a verified production Brevo sender and production Google origin.
-- Keep `backend/.env` out of source control and secret managers' logs.
+This repository stays local-first by default. To deploy to Render without changing workspace files, set environment variables in Render only:
 
-## Render frontend + separate backend
+1. Frontend (Static Site) environment variables:
+	- `VITE_API_BASE=https://<your-backend-service>.onrender.com/api`
+	- `VITE_APP_URL=https://<your-frontend-service>.onrender.com`
+	- `VITE_GOOGLE_CLIENT_ID=<your-google-web-client-id>`
+2. Backend (Web Service) environment variables:
+	- `FRONTEND_ORIGIN=https://<your-frontend-service>.onrender.com`
+	- `DATABASE_URL=<your-render-postgres-url>`
+	- `JWT_SECRET=<strong-random-secret>`
+	- `GOOGLE_CLIENT_ID=<your-google-web-client-id>`
+3. Do not commit Render URLs into `.env` or `backend/.env`; keep those files local-only.
 
-For a Render static site and Render web service:
-
-1. Set the frontend Render environment variable `VITE_API_BASE` to the backend URL including `/api`, for example `https://your-backend.onrender.com/api`.
-2. Set `VITE_APP_URL` to the frontend URL, for example `https://your-frontend.onrender.com`.
-3. Use `npm run build` as the frontend build command and `docs` as the publish directory.
-4. Set the backend `FRONTEND_ORIGIN` to the exact frontend origin, without a trailing slash.
-
-Frontend `VITE_*` values are embedded at build time. Backend secrets must be configured only in the backend Render service environment.
+Frontend `VITE_*` values are embedded at build time. Backend secrets must be configured only in backend service environment variables.
