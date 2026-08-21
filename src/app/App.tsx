@@ -28,6 +28,18 @@ const optimizeImageUrl = (source: string, width = 900, height = 560) => {
   return source;
 };
 
+const parseHirePrice = (value: unknown): number | null => {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'string') return null;
+
+  const numericValue = Number.parseFloat(value.replace(/,/g, '').replace(/[^\d.-]/g, ''));
+  return Number.isFinite(numericValue) ? numericValue : null;
+};
+
+const formatHirePrice = (value: number | null) => (
+  value === null ? 'Price on request' : `KSh${value.toLocaleString()}`
+);
+
 const garagesStatic: any[] = [];
 
 const mechanicsStatic: any[] = [];
@@ -119,9 +131,9 @@ const normalizeHire = (item: any, index: number, kind: "car-hire" | "bike-hire")
   type: item?.serviceType ?? item?.servicetype ?? item?.type ?? kind,
   base: item?.location ?? item?.address ?? item?.base ?? item?.pickup ?? "Nairobi",
   pickup: item?.location ?? item?.address ?? item?.pickup ?? item?.base ?? "Nairobi",
-  price: Number(item?.price ?? 0),
-  hourly: Number(item?.hourly ?? item?.price ?? 0),
-  daily: Number(item?.daily ?? item?.price ?? 0),
+  price: parseHirePrice(item?.price),
+  hourly: parseHirePrice(item?.hourly ?? item?.price),
+  daily: parseHirePrice(item?.daily ?? item?.price),
   seats: item?.seats ?? "",
   transmission: item?.transmission ?? "",
   description: item?.description ?? "",
@@ -1144,7 +1156,7 @@ export default function App() {
                       <div className="mt-4 flex items-center justify-between">
                         <div>
                           <span className="text-2xl font-black text-foreground" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
-                            KSh{c.price.toLocaleString()}
+                            {formatHirePrice(c.price)}
                           </span>
                           <span className="text-xs text-muted-foreground ml-1">/day</span>
                         </div>
@@ -1221,7 +1233,7 @@ export default function App() {
                             <Clock size={10} /> Per Hour
                           </div>
                           <div className="font-black text-foreground text-lg" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
-                            KSh{b.hourly.toLocaleString()}
+                            {formatHirePrice(b.hourly)}
                           </div>
                         </div>
                         <div className="bg-secondary px-3 py-2">
@@ -1229,7 +1241,7 @@ export default function App() {
                             <Calendar size={10} /> Per Day
                           </div>
                           <div className="font-black text-foreground text-lg" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
-                            KSh{b.daily.toLocaleString()}
+                            {formatHirePrice(b.daily)}
                           </div>
                         </div>
                       </div>
