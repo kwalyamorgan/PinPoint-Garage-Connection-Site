@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { useAuth } from '../../lib/auth';
 import api, * as apiClient from '../../lib/api';
 import ListingDialog from './ListingDialog';
 import {
@@ -52,8 +51,15 @@ interface DashboardStats {
 
 type DashboardTab = 'overview' | 'listings' | 'bookings' | 'profile' | 'stats';
 
-export default function ProviderDashboard({ onClose, onLogout }: { onClose: () => void; onLogout?: () => void }) {
-  const { user, logout } = useAuth();
+export default function ProviderDashboard({
+  onClose,
+  onLogout,
+  user,
+}: {
+  onClose: () => void;
+  onLogout: () => Promise<void> | void;
+  user: { id: string; email: string; role: string } | null;
+}) {
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
   const [listings, setListings] = useState<Listing[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -151,8 +157,7 @@ export default function ProviderDashboard({ onClose, onLogout }: { onClose: () =
 
     try {
       await api.deleteProviderAccount();
-      await logout();
-      onLogout?.();
+      await onLogout();
     } catch (err) {
       console.error('Failed to delete account:', err);
       window.alert('Unable to delete account right now. Please try again.');
@@ -197,8 +202,7 @@ export default function ProviderDashboard({ onClose, onLogout }: { onClose: () =
 
   const handleLogout = async () => {
     try {
-      await logout();
-      onLogout?.();
+      await onLogout();
     } catch (err) {
       console.error('Failed to logout:', err);
     }
@@ -232,15 +236,15 @@ export default function ProviderDashboard({ onClose, onLogout }: { onClose: () =
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 overflow-hidden">
-      <div className="flex h-full">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50">
+      <div className="flex min-h-full flex-col md:flex-row">
         {/* Sidebar */}
-        <div className="w-64 bg-card border-r border-border flex flex-col">
-          <div className="p-5 border-b border-border">
+        <div className="flex w-full flex-col border-b border-border bg-card md:h-screen md:w-64 md:shrink-0 md:border-r md:border-b-0">
+          <div className="border-b border-border p-4 md:p-5">
             <h2 className="font-bold text-foreground text-lg">Provider Hub</h2>
           </div>
 
-          <nav className="flex-1 overflow-y-auto p-4 space-y-2">
+          <nav className="flex flex-1 gap-2 overflow-x-auto p-3 md:block md:space-y-2 md:overflow-y-auto md:overflow-x-visible md:p-4">
             {[
               { id: 'overview' as const, label: 'Overview', icon: '📊' },
               { id: 'listings' as const, label: 'Listings', icon: '📦' },
@@ -251,7 +255,7 @@ export default function ProviderDashboard({ onClose, onLogout }: { onClose: () =
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`w-full text-left px-4 py-2.5 rounded text-sm font-medium transition-colors flex items-center gap-2 ${
+                className={`min-h-11 shrink-0 rounded px-3 py-2.5 text-left text-sm font-medium transition-colors flex items-center gap-2 md:w-full md:px-4 ${
                   activeTab === tab.id
                     ? 'bg-primary text-white'
                     : 'text-muted-foreground hover:bg-secondary'
@@ -263,10 +267,10 @@ export default function ProviderDashboard({ onClose, onLogout }: { onClose: () =
           </nav>
 
           {/* Profile Summary with Logout */}
-          <div className="p-4 border-t border-border bg-secondary">
-            <div className="mb-4">
+          <div className="border-t border-border bg-secondary p-3 md:p-4">
+            <div className="mb-3 md:mb-4">
               <p className="text-xs text-muted-foreground uppercase font-medium mb-1">Welcome</p>
-              <p className="text-lg font-bold text-foreground">
+              <p className="text-base font-bold text-foreground md:text-lg">
                 Hello {profile?.firstName || user?.email?.split('@')[0] || 'Provider'}
               </p>
               <p className="text-xs text-primary mt-1 font-medium">Provider Account</p>
@@ -281,11 +285,11 @@ export default function ProviderDashboard({ onClose, onLogout }: { onClose: () =
         </div>
 
         {/* Main Content */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex min-w-0 flex-1 flex-col">
           {/* Header */}
-          <div className="border-b border-border px-8 py-5 flex items-center justify-between bg-secondary/50">
+          <div className="flex items-center justify-between border-b border-border bg-secondary/50 px-4 py-4 md:px-8 md:py-5">
             <div>
-              <h1 className="text-2xl font-bold text-foreground">
+              <h1 className="text-xl font-bold text-foreground md:text-2xl">
                 {activeTab === 'overview' && 'Dashboard Overview'}
                 {activeTab === 'listings' && 'My Listings'}
                 {activeTab === 'bookings' && 'Booking Orders'}
@@ -299,9 +303,9 @@ export default function ProviderDashboard({ onClose, onLogout }: { onClose: () =
           <div className="flex-1 overflow-y-auto">
             {/* OVERVIEW TAB */}
             {activeTab === 'overview' && (
-              <div className="p-8">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
-                  <div className="bg-card border border-border rounded-lg p-6">
+              <div className="min-w-0 p-4 md:p-8">
+                <div className="mb-8 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5 lg:gap-4">
+                  <div className="bg-card border border-border rounded-lg p-4 md:p-6">
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-xs text-muted-foreground uppercase font-medium">Total Listings</p>
@@ -311,7 +315,7 @@ export default function ProviderDashboard({ onClose, onLogout }: { onClose: () =
                     </div>
                   </div>
 
-                  <div className="bg-card border border-border rounded-lg p-6">
+                  <div className="bg-card border border-border rounded-lg p-4 md:p-6">
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-xs text-muted-foreground uppercase font-medium">Total Bookings</p>
@@ -321,7 +325,7 @@ export default function ProviderDashboard({ onClose, onLogout }: { onClose: () =
                     </div>
                   </div>
 
-                  <div className="bg-card border border-border rounded-lg p-6">
+                  <div className="bg-card border border-border rounded-lg p-4 md:p-6">
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-xs text-muted-foreground uppercase font-medium">Pending</p>
@@ -331,7 +335,7 @@ export default function ProviderDashboard({ onClose, onLogout }: { onClose: () =
                     </div>
                   </div>
 
-                  <div className="bg-card border border-border rounded-lg p-6">
+                  <div className="bg-card border border-border rounded-lg p-4 md:p-6">
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-xs text-muted-foreground uppercase font-medium">Approved</p>
@@ -341,7 +345,7 @@ export default function ProviderDashboard({ onClose, onLogout }: { onClose: () =
                     </div>
                   </div>
 
-                  <div className="bg-card border border-border rounded-lg p-6">
+                  <div className="bg-card border border-border rounded-lg p-4 md:p-6">
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-xs text-muted-foreground uppercase font-medium">Rejected</p>
@@ -353,7 +357,7 @@ export default function ProviderDashboard({ onClose, onLogout }: { onClose: () =
                 </div>
 
                 {/* Recent Bookings */}
-                <div className="bg-card border border-border rounded-lg p-6">
+                <div className="bg-card border border-border rounded-lg p-4 md:p-6">
                   <h2 className="text-lg font-bold text-foreground mb-4">Recent Bookings</h2>
                   <div className="space-y-3">
                     {bookings.slice(0, 5).map(booking => (
@@ -362,7 +366,7 @@ export default function ProviderDashboard({ onClose, onLogout }: { onClose: () =
                           <p className="text-sm font-semibold text-foreground">{booking.customerName || 'Customer'}</p>
                           <p className="text-xs text-muted-foreground">{booking.serviceType || 'Service Request'}</p>
                         </div>
-                        <div className="flex items-center gap-3">
+                        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
                           <span className={`text-xs font-bold uppercase px-2 py-1 rounded ${getStatusBadge(booking.status)}`}>
                             {booking.status}
                           </span>
@@ -385,8 +389,8 @@ export default function ProviderDashboard({ onClose, onLogout }: { onClose: () =
 
             {/* LISTINGS TAB */}
             {activeTab === 'listings' && (
-              <div className="p-8">
-                <div className="flex items-center justify-between mb-6">
+              <div className="p-4 md:p-8">
+                <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <h2 className="text-lg font-bold text-foreground">Manage Your Listings</h2>
                   <button
                     onClick={() => {
@@ -461,7 +465,7 @@ export default function ProviderDashboard({ onClose, onLogout }: { onClose: () =
 
             {/* BOOKINGS TAB */}
             {activeTab === 'bookings' && (
-              <div className="p-8">
+              <div className="p-4 md:p-8">
                 <div className="mb-6">
                   <h2 className="text-lg font-bold text-foreground mb-4">Booking Requests</h2>
                   <div className="flex gap-2 flex-wrap">
@@ -502,7 +506,7 @@ export default function ProviderDashboard({ onClose, onLogout }: { onClose: () =
                             {booking.status}
                           </span>
                         </div>
-                        <div className="grid grid-cols-3 gap-4 text-xs text-muted-foreground mb-3">
+                        <div className="mb-3 grid gap-3 text-xs text-muted-foreground sm:grid-cols-3">
                           <div>
                             <p className="font-medium text-foreground">{booking.customerEmail}</p>
                             <Mail size={14} className="inline mt-1" />
@@ -533,7 +537,7 @@ export default function ProviderDashboard({ onClose, onLogout }: { onClose: () =
 
             {/* STATS TAB */}
             {activeTab === 'stats' && (
-              <div className="p-8">
+              <div className="p-4 md:p-8">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
                   <div className="bg-card border border-border rounded-lg p-6">
                     <h3 className="font-bold text-foreground mb-4 flex items-center gap-2">
@@ -587,7 +591,7 @@ export default function ProviderDashboard({ onClose, onLogout }: { onClose: () =
 
             {/* PROFILE TAB */}
             {activeTab === 'profile' && (
-              <div className="p-8">
+              <div className="p-4 md:p-8">
                 <div className="max-w-2xl">
                   <div className="bg-card border border-border rounded-lg p-6 mb-6">
                     <div className="flex items-center justify-between mb-6">
@@ -602,7 +606,7 @@ export default function ProviderDashboard({ onClose, onLogout }: { onClose: () =
 
                     {editProfile ? (
                       <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid gap-4 sm:grid-cols-2">
                           <input
                             type="text"
                             placeholder="First Name"
@@ -710,7 +714,7 @@ export default function ProviderDashboard({ onClose, onLogout }: { onClose: () =
         {/* Booking Detail Modal */}
         {selectedBooking && activeTab === 'bookings' && (
           <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4" onClick={() => setSelectedBooking(null)}>
-            <div className="bg-card border border-border rounded-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="bg-card border border-border rounded-xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-4 sm:p-6" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-bold text-foreground">Booking Details</h2>
                 <button onClick={() => setSelectedBooking(null)} className="text-muted-foreground hover:text-foreground">
@@ -741,7 +745,7 @@ export default function ProviderDashboard({ onClose, onLogout }: { onClose: () =
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-4 sm:grid-cols-2">
                   <div>
                     <p className="text-xs text-muted-foreground uppercase font-medium mb-1 flex items-center gap-1">
                       <Mail size={12} /> Email

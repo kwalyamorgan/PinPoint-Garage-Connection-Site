@@ -477,13 +477,11 @@ export default function App() {
   if (auth.user && auth.user.role === 'lister') {
     return (
       <ProviderDashboard 
+        user={auth.user}
         onClose={() => {
           // Providers can't close the dashboard, it's their main view
         }}
-        onLogout={() => {
-          // Refresh auth state to reflect logout
-          auth.refresh && auth.refresh();
-        }}
+        onLogout={auth.logout}
       />
     );
   }
