@@ -14,7 +14,7 @@ import {
 import api from "../../lib/api";
 import ListingDialog from "./ListingDialog";
 
-type AdminView = "requests" | "listings" | "mechanics" | "customers";
+type AdminView = "requests" | "history" | "listings" | "mechanics" | "customers";
 type RequestStatus =
   | "pending"
   | "reviewed"
@@ -65,6 +65,7 @@ export default function AdminDashboard({ auth }: { auth: any }) {
   const [selectedMechanic, setSelectedMechanic] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [clearingHistory, setClearingHistory] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -126,6 +127,19 @@ export default function AdminDashboard({ auth }: { auth: any }) {
     ) as HTMLInputElement | null;
     if (input?.value)
       updateRequest(request, { scheduledAt: input.value, status: "approved" });
+  };
+
+  const clearHistory = async () => {
+    if (!window.confirm("Clear all completed and past customer request history?")) return;
+    setClearingHistory(true);
+    try {
+      await api.clearAdminRequestHistory();
+      await load();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setClearingHistory(false);
+    }
   };
 
   if (auth.user?.role !== "admin")
@@ -243,6 +257,13 @@ export default function AdminDashboard({ auth }: { auth: any }) {
             Customer requests
           </button>
           <button
+            onClick={() => setView("history")}
+            className={`flex items-center gap-2 whitespace-nowrap border-b-2 px-3 py-3 text-sm font-bold ${view === "history" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
+          >
+            <Clock size={16} />
+            History ({requests.filter((request) => !["pending", "reviewed"].includes(request.status)).length})
+          </button>
+          <button
             onClick={() => setView("listings")}
             className={`flex items-center gap-2 whitespace-nowrap border-b-2 px-3 py-3 text-sm font-bold ${view === "listings" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
           >
@@ -274,7 +295,7 @@ export default function AdminDashboard({ auth }: { auth: any }) {
                 progress current.
               </p>
             </div>
-            {requests.map((request) => (
+            {requests.filter((request) => ["pending", "reviewed"].includes(request.status)).map((request) => (
               <article
                 key={request.id}
                 className="portal-surface rounded-xl p-5"
@@ -389,11 +410,36 @@ export default function AdminDashboard({ auth }: { auth: any }) {
                 </div>
               </article>
             ))}
-            {!requests.length && (
+            {!requests.some((request) => ["pending", "reviewed"].includes(request.status)) && (
               <div className="portal-surface rounded-xl p-10 text-center text-sm text-muted-foreground">
                 No mechanic requests yet.
               </div>
             )}
+          </section>
+        )}
+        {view === "history" && (
+          <section className="space-y-4">
+            <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+              <div>
+                <p className="portal-kicker">Past requests</p>
+                <h2 className="text-2xl font-black">Request history</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Arrival-set, completed, and declined requests are kept here.</p>
+              </div>
+              <button onClick={clearHistory} disabled={clearingHistory || !requests.some((request) => !["pending", "reviewed"].includes(request.status))} className="rounded border border-red-500/40 px-3 py-2 text-sm font-bold text-red-400 disabled:opacity-40">
+                {clearingHistory ? "Clearing..." : "Clear history"}
+              </button>
+            </div>
+            {requests.filter((request) => !["pending", "reviewed"].includes(request.status)).map((request) => (
+              <article key={request.id} className="portal-surface rounded-xl p-5">
+                <div className="flex flex-col justify-between gap-2 sm:flex-row">
+                  <div><h3 className="font-bold">{request.customerName || request.customerEmail}</h3><p className="mt-1 text-sm text-muted-foreground">{request.customerPhone} · {request.requestService}</p></div>
+                  <span className="h-fit rounded-full bg-secondary px-2 py-1 text-xs font-bold uppercase text-muted-foreground">{statusLabels[request.status as RequestStatus] || request.status}</span>
+                </div>
+                <p className="mt-3 whitespace-pre-line text-sm text-muted-foreground">{request.description}</p>
+                <p className="mt-3 text-xs text-muted-foreground">Requested {request.dateRequested ? new Date(request.dateRequested).toLocaleString() : "-"}</p>
+              </article>
+            ))}
+            {!requests.some((request) => !["pending", "reviewed"].includes(request.status)) && <div className="portal-surface rounded-xl p-10 text-center text-sm text-muted-foreground">No past requests yet.</div>}
           </section>
         )}
         {view === "listings" && (

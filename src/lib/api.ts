@@ -173,6 +173,11 @@ export async function updateMechanicRequest(id: string, data: { scheduledAt?: st
   return res.json();
 }
 
+export async function clearAdminRequestHistory() {
+  const res = await fetch(`${API_BASE}/admin/request-history`, { method: 'DELETE', credentials: 'include' });
+  if (!res.ok) throw new Error((await res.json()).error || 'Unable to clear request history');
+}
+
 export async function updateProviderStatus(id: string, data: { approved?: boolean; enabled?: boolean }) {
   const res = await fetch(`${API_BASE}/admin/providers/${id}/status`, {
     method: 'PATCH',
@@ -416,14 +421,31 @@ export default {
   fetchGarages,
   fetchMechanics,
   fetchTransport,
+  getCustomerDashboard,
+  createCustomerBooking,
+  createMechanicRequest,
+  createTransportRequest,
+  createCustomerWhatsappBooking,
+  updateCustomerBooking,
+  submitCustomerReview,
+  updateCustomerProfile,
+  deleteCustomerAccount,
   getCloudinaryUploadSignature,
   register,
   login,
   me,
   logout,
+  requestOTPRegister,
+  registerWithOTP,
+  forgotPassword,
+  resetPassword,
+  googleLogin,
+  googleRegister,
   getAdminDashboard,
   getAdminMechanics,
-  createMechanicRequest,
+  getAdminTransport,
+  updateMechanicRequest,
+  clearAdminRequestHistory,
   updateProviderStatus,
   createGarage,
   createMechanic,
