@@ -299,7 +299,7 @@ function ProviderDetailDialog({
                   }}
                   className="flex-1 rounded bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#e04a00]"
                 >
-                  Continue
+                  {provider.serviceType === 'transport' ? 'Request via PinPoint' : 'Continue'}
                 </button>
               )}
               <button
@@ -340,10 +340,8 @@ export default function App() {
   const [authOpen, setAuthOpen] = useState(false);
   const [listingOpen, setListingOpen] = useState(false);
   const [mechanicRequestOpen, setMechanicRequestOpen] = useState(false);
-    const [transportRequestOpen, setTransportRequestOpen] = useState(false);
+  const [transportRequestOpen, setTransportRequestOpen] = useState(false);
   const [authResume, setAuthResume] = useState<'mechanic' | 'transport' | null>(null);
-                {provider.phone && provider.serviceType !== 'transport' && <p><span className="font-semibold text-foreground">Phone:</span> {provider.phone}</p>}
-                    {provider.serviceType === 'transport' ? 'Request via PinPoint' : 'Continue'}
   const [selectedProvider, setSelectedProvider] = useState<any | null>(null);
   const [providerDialogOpen, setProviderDialogOpen] = useState(false);
   const [userDashboardOpen, setUserDashboardOpen] = useState(false);
@@ -771,12 +769,12 @@ export default function App() {
                 className="bg-primary text-white font-bold text-sm uppercase tracking-wider px-6 py-3 rounded hover:bg-[#e04a00] transition-colors"
               >
                 Request a mechanic
-                            <button
-                              onClick={() => setTransportRequestOpen(true)}
-                              className="border border-primary/50 bg-primary/10 text-primary font-bold text-sm uppercase tracking-wider px-6 py-3 rounded hover:bg-primary/20 transition-colors"
-                            >
-                              Hama na Sisi
-                            </button>
+              </button>
+              <button
+                onClick={() => setTransportRequestOpen(true)}
+                className="border border-primary/50 bg-primary/10 text-primary font-bold text-sm uppercase tracking-wider px-6 py-3 rounded hover:bg-primary/20 transition-colors"
+              >
+                Hama na Sisi
               </button>
               <button
                 onClick={() => document.getElementById("services")?.scrollIntoView({ behavior: "smooth" })}
