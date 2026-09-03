@@ -27,7 +27,6 @@ export default function AuthDialog({ auth, open, onOpenChange, onSuccess }: { au
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [otp, setOtp] = useState('');
-  const [role, setRole] = useState<'user' | 'lister'>('lister');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -90,7 +89,7 @@ export default function AuthDialog({ auth, open, onOpenChange, onSuccess }: { au
           size: 'large',
           text: 'continue_with',
           shape: 'pill',
-          width: 320,
+          width: 280,
         });
         container.dataset.googleRendered = 'true';
         setGoogleLoading(false);
@@ -140,7 +139,6 @@ export default function AuthDialog({ auth, open, onOpenChange, onSuccess }: { au
                   googleId: result.googleId || payload.sub || `google-${Date.now()}`,
                   name: result.name || payload.name || nextEmail,
                 });
-                setRole('user');
                 setMode('google-role');
                 setError(null);
                 return;
@@ -234,7 +232,7 @@ export default function AuthDialog({ auth, open, onOpenChange, onSuccess }: { au
     if (password !== confirmPassword) { setError('Passwords do not match'); return; }
     setLoading(true);
     try {
-      const ok = await auth.registerWithOTP(email, password, otp, role);
+      const ok = await auth.registerWithOTP(email, password, otp, 'user');
       if (!ok) setError('Registration failed'); else { onOpenChange(false); onSuccess?.(); }
     } catch (err) {
       setError('Server error');
@@ -248,7 +246,7 @@ export default function AuthDialog({ auth, open, onOpenChange, onSuccess }: { au
     if (password !== confirmPassword) { setError('Passwords do not match'); return; }
     setLoading(true);
     try {
-      const result = await auth.register(email, password, role);
+      const result = await auth.register(email, password, 'user');
       if (!result?.ok) {
         if (result?.status === 409) {
           setError(result.error || 'This email already exists. Please sign in instead.');
@@ -257,10 +255,8 @@ export default function AuthDialog({ auth, open, onOpenChange, onSuccess }: { au
         setError(result?.error || 'Registration failed');
         return;
       }
-      setSuccess('Account created. Please sign in now.');
-      setMode('login');
-      setPassword('');
-      setConfirmPassword('');
+      onOpenChange(false);
+      onSuccess?.();
     } catch (err) {
       setError('Server error');
     } finally { setLoading(false); }
@@ -274,7 +270,7 @@ export default function AuthDialog({ auth, open, onOpenChange, onSuccess }: { au
     setLoading(true);
     setError(null);
     try {
-      const ok = await auth.googleRegister(googlePendingUser.email, googlePendingUser.googleId, googlePendingUser.name, role);
+      const ok = await auth.googleRegister(googlePendingUser.email, googlePendingUser.googleId, googlePendingUser.name, 'user');
       if (!ok) {
         setError('Account creation failed');
         return;
@@ -390,14 +386,6 @@ export default function AuthDialog({ auth, open, onOpenChange, onSuccess }: { au
             Google account not found. Choose how you want to sign up.
           </div>
 
-          <div>
-            <label className="text-sm font-medium text-muted-foreground">Role</label>
-            <select value={role} onChange={(e) => setRole(e.target.value as 'user' | 'lister')} className="w-full bg-secondary border border-border rounded px-3 py-2 text-sm mt-2">
-              <option value="user">Normal User</option>
-              <option value="lister">Provider</option>
-            </select>
-          </div>
-
           {error && <div className="text-destructive text-sm bg-destructive/10 p-2 rounded">{error}</div>}
 
           <DialogFooter>
@@ -437,14 +425,6 @@ export default function AuthDialog({ auth, open, onOpenChange, onSuccess }: { au
               </label>
               <Input value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} type="password" placeholder="••••••••" />
             </div>
-            <div>
-              <label className="text-sm font-medium text-muted-foreground">Role</label>
-              <select value={role} onChange={(e) => setRole(e.target.value as 'user' | 'lister')} className="w-full bg-secondary border border-border rounded px-3 py-2 text-sm mt-2">
-                <option value="user">Normal User</option>
-                <option value="lister">Provider</option>
-              </select>
-            </div>
-
             {error && <div className="text-destructive text-sm bg-destructive/10 p-2 rounded">{error}</div>}
             {success && <div className="text-green-600 text-sm bg-green-50 p-2 rounded">{success}</div>}
 
@@ -525,14 +505,6 @@ export default function AuthDialog({ auth, open, onOpenChange, onSuccess }: { au
             </label>
             <Input value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} type="password" placeholder="••••••••" />
           </div>
-          <div>
-            <label className="text-sm font-medium text-muted-foreground">Role</label>
-            <select value={role} onChange={(e) => setRole(e.target.value as any)} className="w-full bg-secondary border border-border rounded px-3 py-2 text-sm">
-              <option value="user">User</option>
-              <option value="lister">Provider (can add listings)</option>
-            </select>
-          </div>
-
           {error && <div className="text-destructive text-sm bg-destructive/10 p-2 rounded">{error}</div>}
 
           <DialogFooter>
@@ -629,7 +601,7 @@ export default function AuthDialog({ auth, open, onOpenChange, onSuccess }: { au
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-h-[92vh] w-[calc(100%-1rem)] max-w-[calc(100%-1rem)] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>
             {mode === 'login' && 'Sign In'}

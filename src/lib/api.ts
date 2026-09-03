@@ -34,6 +34,45 @@ export async function createCustomerBooking(data: { providerId: string; provider
   return res.json();
 }
 
+export async function createMechanicRequest(data: {
+  serviceType: 'breakdown' | 'towing' | 'onsite-repair';
+  description: string;
+  location: string;
+  make: string;
+  model: string;
+  year?: string;
+  licensePlate?: string;
+  phone: string;
+  whatsapp?: string;
+  latitude: string;
+  longitude: string;
+}) {
+  const res = await fetch(`${API_BASE}/customer/mechanic-requests`, {
+    method: 'POST',
+    headers: jsonHeaders,
+    credentials: 'include',
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error((await res.json()).error || 'Unable to submit mechanic request');
+  return res.json();
+}
+
+export async function createTransportRequest(data: {
+  movingDate: string;
+  pickupLocation: string;
+  destination: string;
+  items: string;
+  phone: string;
+  whatsapp?: string;
+  notes?: string;
+}) {
+  const res = await fetch(`${API_BASE}/customer/transport-requests`, {
+    method: 'POST', headers: jsonHeaders, credentials: 'include', body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error((await res.json()).error || 'Unable to submit transport request');
+  return res.json();
+}
+
 export async function createCustomerWhatsappBooking(data: { providerId: string; providerType: string; description?: string }) {
   const res = await fetch(`${API_BASE}/customer/bookings/whatsapp`, { method: 'POST', headers: jsonHeaders, credentials: 'include', body: JSON.stringify(data) });
   if (!res.ok) throw new Error((await res.json()).error || 'Failed to record WhatsApp booking');
@@ -111,6 +150,26 @@ export async function logout() {
 export async function getAdminDashboard() {
   const res = await fetch(`${API_BASE}/admin/dashboard`, { credentials: 'include' });
   if (!res.ok) throw new Error((await res.json()).error || 'Unable to load admin dashboard');
+  return res.json();
+}
+
+export async function getAdminMechanics() {
+  const res = await fetch(`${API_BASE}/admin/mechanics`, { credentials: 'include' });
+  if (!res.ok) throw new Error((await res.json()).error || 'Unable to load mechanics');
+  return res.json();
+}
+
+export async function getAdminTransport() {
+  const res = await fetch(`${API_BASE}/admin/transport`, { credentials: 'include' });
+  if (!res.ok) throw new Error((await res.json()).error || 'Unable to load transport providers');
+  return res.json();
+}
+
+export async function updateMechanicRequest(id: string, data: { scheduledAt?: string; status?: string; notes?: string }) {
+  const res = await fetch(`${API_BASE}/admin/mechanic-requests/${id}`, {
+    method: 'PATCH', headers: jsonHeaders, credentials: 'include', body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error((await res.json()).error || 'Unable to update mechanic request');
   return res.json();
 }
 
@@ -195,7 +254,8 @@ export async function createGarage(data: { name: string; address?: string; phone
     credentials: 'include',
     body: JSON.stringify(data),
   });
-  return res;
+  if (!res.ok) throw new Error((await res.json()).error || 'Failed to create garage');
+  return res.json();
 }
 
 export async function createMechanic(data: any) {
@@ -205,7 +265,8 @@ export async function createMechanic(data: any) {
     credentials: 'include',
     body: JSON.stringify(data),
   });
-  return res;
+  if (!res.ok) throw new Error((await res.json()).error || 'Failed to create mechanic');
+  return res.json();
 }
 
 export async function createTransport(data: any) {
@@ -215,7 +276,8 @@ export async function createTransport(data: any) {
     credentials: 'include',
     body: JSON.stringify(data),
   });
-  return res;
+  if (!res.ok) throw new Error((await res.json()).error || 'Failed to create transport');
+  return res.json();
 }
 
 export async function updateGarage(id: string, data: any) {
@@ -360,6 +422,8 @@ export default {
   me,
   logout,
   getAdminDashboard,
+  getAdminMechanics,
+  createMechanicRequest,
   updateProviderStatus,
   createGarage,
   createMechanic,

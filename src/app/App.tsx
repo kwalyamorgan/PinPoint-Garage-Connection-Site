@@ -3,7 +3,8 @@ import { useAuth } from "../lib/auth";
 import api from "../lib/api";
 import AuthDialog from "./components/AuthDialog";
 import ListingDialog from "./components/ListingDialog";
-import ProviderDashboard from "./components/ProviderDashboard";
+import MechanicRequestDialog from "./components/MechanicRequestDialog";
+import TransportRequestDialog from "./components/TransportRequestDialog";
 import UserDashboard from "./components/UserDashboard";
 import AdminDashboard from "./components/AdminDashboard";
 import {
@@ -66,6 +67,9 @@ const normalizeGarage = (item: any, index: number = 0) => ({
   open: item?.open ?? (item?.availability ? String(item.availability).toLowerCase().includes('open') : true),
   phone: item?.phone ?? "+254700000000",
   description: item?.description ?? "",
+  serviceDetails: item?.serviceDetails ?? item?.servicedetails ?? "",
+  requirements: item?.requirements ?? "",
+  vehicleType: item?.vehicleType ?? item?.vehicletype ?? "",
   price: item?.price ?? item?.pricing ?? "",
   discount: Number(item?.discount ?? 0),
   availability: item?.availability ?? "Available now",
@@ -144,6 +148,7 @@ const normalizeHire = (item: any, index: number, kind: "car-hire" | "bike-hire")
   img: item?.imageUrl ?? item?.imageurl ?? item?.img ?? item?.image ?? fallbackImageBase,
   isAvailable: (item?.isAvailable ?? item?.isavailable) !== false,
   tag: item?.label ?? item?.tag ?? "",
+  requirements: item?.requirements ?? "",
 });
 
 // ─── Stars ─────────────────────────────────────────────────────────────────────
@@ -262,13 +267,15 @@ function ProviderDetailDialog({
               {provider.transmission && <p><span className="font-semibold text-foreground">Transmission:</span> {provider.transmission}</p>}
               {provider.pickup && <p><span className="font-semibold text-foreground">Pickup:</span> {provider.pickup}</p>}
               {provider.description && <p><span className="font-semibold text-foreground">Description:</span> {provider.description}</p>}
+              {provider.serviceDetails && <p><span className="font-semibold text-foreground">Services and charges:</span> {provider.serviceDetails}</p>}
+              {provider.requirements && <p><span className="font-semibold text-foreground">Requirements:</span> {provider.requirements}</p>}
               {provider.price && <p><span className="font-semibold text-foreground">Price:</span> {provider.price}</p>}
               {provider.hourly ? <p><span className="font-semibold text-foreground">Hourly rate:</span> KSh {Number(provider.hourly).toLocaleString()}</p> : null}
               {provider.daily ? <p><span className="font-semibold text-foreground">Daily rate:</span> KSh {Number(provider.daily).toLocaleString()}</p> : null}
               {provider.discount ? <p><span className="font-semibold text-foreground">Discount:</span> {provider.discount}% off</p> : null}
               {provider.availability && <p><span className="font-semibold text-foreground">Availability:</span> {provider.availability}</p>}
               {provider.label && <p><span className="font-semibold text-foreground">Label:</span> {provider.label}</p>}
-              {provider.phone && <p><span className="font-semibold text-foreground">Phone:</span> {provider.phone}</p>}
+              {provider.phone && provider.serviceType !== 'transport' && <p><span className="font-semibold text-foreground">Phone:</span> {provider.phone}</p>}
             </div>
 
             <div className="mt-5 flex gap-2">
@@ -332,6 +339,11 @@ export default function App() {
   const [bikeHireState, setBikeHireState] = useState<any[]>([]);
   const [authOpen, setAuthOpen] = useState(false);
   const [listingOpen, setListingOpen] = useState(false);
+  const [mechanicRequestOpen, setMechanicRequestOpen] = useState(false);
+    const [transportRequestOpen, setTransportRequestOpen] = useState(false);
+  const [authResume, setAuthResume] = useState<'mechanic' | 'transport' | null>(null);
+                {provider.phone && provider.serviceType !== 'transport' && <p><span className="font-semibold text-foreground">Phone:</span> {provider.phone}</p>}
+                    {provider.serviceType === 'transport' ? 'Request via PinPoint' : 'Continue'}
   const [selectedProvider, setSelectedProvider] = useState<any | null>(null);
   const [providerDialogOpen, setProviderDialogOpen] = useState(false);
   const [userDashboardOpen, setUserDashboardOpen] = useState(false);
@@ -339,6 +351,10 @@ export default function App() {
 
   // auth
   const auth = useAuth();
+  const requestAuth = (resume: 'mechanic' | 'transport' | null = null) => {
+    setAuthResume(resume);
+    setAuthOpen(true);
+  };
   if (window.location.pathname.startsWith('/admin')) {
     return <AdminDashboard auth={auth} />;
   }
@@ -389,7 +405,6 @@ export default function App() {
     (async () => {
       try {
         const g = await api.fetchGarages();
-        const m = await api.fetchMechanics();
         const t = await api.fetchTransport();
         if (!mounted) return;
 
@@ -401,7 +416,7 @@ export default function App() {
         const nextBikes = normalizedGarages
           .filter((item) => item.serviceType === 'bike-hire')
           .map((item, index) => normalizeHire(item, index, 'bike-hire'));
-        const nextMechanics = Array.isArray(m) ? m.map((item, index) => normalizeMechanic(item, index, mechanicImages)) : mechanicsStatic;
+        const nextMechanics = mechanicsStatic;
         const nextTransport = Array.isArray(t) ? t.map((item, index) => normalizeTransport(item, index)) : transportStatic;
 
         setGaragesState(nextGarages);
@@ -468,13 +483,13 @@ export default function App() {
     )).sort((first, second) => first.localeCompare(second));
   }, [garagesState, mechanicsState, transportState, carHireState, bikeHireState]);
 
-  const tabs: { id: ServiceTab; label: string; icon: React.ReactNode; count: number }[] = [
+  const serviceTabs: { id: ServiceTab; label: string; icon: React.ReactNode; count: number }[] = [
     { id: "garages", label: "Garages", icon: <Wrench size={16} />, count: garagesState.length },
-    { id: "mechanics", label: "Mechanics", icon: <Shield size={16} />, count: mechanicsState.length },
-    { id: "transport", label: "Transport", icon: <Truck size={16} />, count: transportState.length },
     { id: "car-hire", label: "Car Hire", icon: <Car size={16} />, count: carHireState.length },
     { id: "bike-hire", label: "Bike Hire", icon: <Bike size={16} />, count: bikeHireState.length },
-  ].filter((tab) => tab.count > 0);
+  ];
+  const tabs = serviceTabs.filter((tab) => tab.count > 0);
+  const headerTabs = tabs.filter((tab) => ['garages', 'car-hire', 'bike-hire'].includes(tab.id));
 
   useEffect(() => {
     if (tabs.length > 0 && !tabs.some((tab) => tab.id === activeTab)) {
@@ -484,19 +499,6 @@ export default function App() {
       setSelectedLocation('');
     }
   }, [activeTab, availableLocations, selectedLocation, tabs]);
-
-  // Provider dashboard view (full page)
-  if (auth.user && auth.user.role === 'lister') {
-    return (
-      <ProviderDashboard 
-        user={auth.user}
-        onClose={() => {
-          // Providers can't close the dashboard, it's their main view
-        }}
-        onLogout={auth.logout}
-      />
-    );
-  }
 
   if (auth.user && auth.user.role === 'user' && userDashboardOpen) {
     return (
@@ -532,8 +534,9 @@ export default function App() {
           </div>
 
           {/* Desktop links */}
-          <div className="hidden md:flex items-center gap-8 text-sm font-medium text-muted-foreground">
-            {servicesVisible && tabs.map((t) => (
+          <div className="hidden md:flex items-center gap-6 text-sm font-medium text-muted-foreground">
+            <button onClick={() => setMechanicRequestOpen(true)} className="font-bold text-primary hover:text-foreground transition-colors">Request mechanic</button>
+            {servicesVisible && headerTabs.map((t) => (
               <button
                 key={t.id}
                 onClick={() => { setActiveTab(t.id); document.getElementById("services")?.scrollIntoView({ behavior: "smooth" }); }}
@@ -551,23 +554,10 @@ export default function App() {
                 {auth.user.role === 'user' && (
                   <button onClick={() => setUserDashboardOpen(true)} className="text-sm bg-primary/80 text-white font-semibold px-4 py-2 rounded hover:bg-primary transition-colors">My Dashboard</button>
                 )}
-                {auth.user.role === 'lister' && (
-                  <button
-                    onClick={() => undefined}
-                    className="text-sm bg-primary/80 text-white font-semibold px-4 py-2 rounded hover:bg-primary transition-colors flex items-center gap-1.5"
-                  >
-                    <BarChart3 size={16} /> Dashboard
-                  </button>
-                )}
                 <button onClick={async () => { await auth.logout(); }} className="text-sm text-muted-foreground hover:text-foreground transition-colors px-4 py-2">Log Out</button>
               </>
             ) : (
               <button onClick={() => setAuthOpen(true)} className="text-sm text-muted-foreground hover:text-foreground transition-colors px-4 py-2">Sign In</button>
-            )}
-            {(!auth.user || auth.user.role === 'lister') && (
-              <button onClick={() => { if (!auth.user) { setAuthOpen(true); return; } setListingOpen(true); }} className="text-sm bg-primary text-white font-semibold px-5 py-2 rounded hover:bg-[#e04a00] transition-colors">
-                List Your Service
-              </button>
             )}
           </div>
 
@@ -579,7 +569,9 @@ export default function App() {
         {/* Mobile menu */}
         {menuOpen && (
           <div className="md:hidden bg-card border-t border-border px-4 py-4 flex flex-col gap-4">
-            {servicesVisible && tabs.map((t) => (
+            <button onClick={() => { setMenuOpen(false); setMechanicRequestOpen(true); }} className="text-left text-sm font-bold text-primary hover:text-foreground">Request mechanic</button>
+            <button onClick={() => { setMenuOpen(false); setTransportRequestOpen(true); }} className="text-left text-sm font-bold text-primary hover:text-foreground">Hama na Sisi</button>
+            {servicesVisible && headerTabs.map((t) => (
               <button
                 key={t.id}
                 onClick={() => { setActiveTab(t.id); setMenuOpen(false); document.getElementById("services")?.scrollIntoView({ behavior: "smooth" }); }}
@@ -594,28 +586,6 @@ export default function App() {
                 <button className="text-sm text-muted-foreground px-5 py-2.5">Logged in as: {auth.user.email}</button>
                 {auth.user.role === 'user' && (
                   <button onClick={() => { setMenuOpen(false); setUserDashboardOpen(true); }} className="text-sm bg-primary/80 text-white font-semibold px-5 py-2.5 rounded w-full">My Dashboard</button>
-                )}
-                {auth.user.role === 'lister' && (
-                  <button
-                    onClick={() => {
-                      setMenuOpen(false);
-                      return;
-                    }}
-                    className="text-sm bg-primary/80 text-white font-semibold px-5 py-2.5 rounded w-full flex items-center justify-center gap-1.5"
-                  >
-                    <BarChart3 size={16} /> Dashboard
-                  </button>
-                )}
-                {auth.user.role === 'lister' && (
-                  <button
-                    onClick={() => {
-                      setMenuOpen(false);
-                      setListingOpen(true);
-                    }}
-                    className="text-sm bg-primary text-white font-semibold px-5 py-2.5 rounded w-full"
-                  >
-                    Add New Service
-                  </button>
                 )}
                 <button
                   onClick={async () => {
@@ -637,15 +607,6 @@ export default function App() {
                   className="text-sm border border-border bg-background text-foreground font-semibold px-5 py-2.5 rounded w-full"
                 >
                   Sign In / Up
-                </button>
-                <button
-                  onClick={() => {
-                    setMenuOpen(false);
-                    setAuthOpen(true);
-                  }}
-                  className="text-sm bg-primary text-white font-semibold px-5 py-2.5 rounded w-full"
-                >
-                  List Your Service
                 </button>
               </>
             )}
@@ -715,26 +676,53 @@ export default function App() {
         open={providerDialogOpen}
         onOpenChange={setProviderDialogOpen}
         provider={selectedProvider ? { ...selectedProvider, _loggedIn: !!auth.user } : null}
-        onSignIn={() => setAuthOpen(true)}
+        onSignIn={() => requestAuth(selectedProvider?.serviceType === 'transport' ? 'transport' : null)}
         onBook={() => {
           if (!auth.user) {
-            setAuthOpen(true);
+            requestAuth(selectedProvider?.serviceType === 'transport' ? 'transport' : null);
             return;
           }
-          setUserDashboardOpen(true);
+          if (selectedProvider?.serviceType === 'transport') setTransportRequestOpen(true);
+          else setUserDashboardOpen(true);
         }}
       />
-      <AuthDialog auth={auth} open={authOpen} onOpenChange={setAuthOpen} onSuccess={() => auth.refresh && auth.refresh()} />
+      <AuthDialog
+        auth={auth}
+        open={authOpen}
+        onOpenChange={setAuthOpen}
+        onSuccess={async () => {
+          await auth.refresh?.();
+          setAuthOpen(false);
+          const resume = authResume;
+          setAuthResume(null);
+          if (resume === 'mechanic') setMechanicRequestOpen(true);
+          if (resume === 'transport') setTransportRequestOpen(true);
+        }}
+      />
       <ListingDialog open={listingOpen} onOpenChange={setListingOpen} onSaved={(item) => {
         if (!item) return;
         if (item.specialty || item.garageId) setMechanicsState((s) => [item, ...s]);
         else if (item.type || item.company) setTransportState((s) => [item, ...s]);
         else setGaragesState((s) => [item, ...s]);
       }} />
+      <MechanicRequestDialog
+        open={mechanicRequestOpen}
+        onOpenChange={setMechanicRequestOpen}
+        user={auth.user}
+        onRequireLogin={() => requestAuth('mechanic')}
+        onSubmitted={() => setUserDashboardOpen(true)}
+      />
+      <TransportRequestDialog
+        open={transportRequestOpen}
+        onOpenChange={setTransportRequestOpen}
+        user={auth.user}
+        onRequireLogin={() => requestAuth('transport')}
+        onSubmitted={() => setUserDashboardOpen(true)}
+      />
 
       {showPublicHomepage && <>
       {/* ── HERO ────────────────────────────────────────────────────────────── */}
-      <section className="relative pt-16 overflow-hidden">
+      <section className="mechanic-hero relative overflow-hidden pt-16">
         {/* Background image with overlay */}
         <div className="absolute inset-0 z-0">
           <img
@@ -745,7 +733,7 @@ export default function App() {
           <div className="absolute inset-0 bg-gradient-to-b from-background/60 via-background/40 to-background" />
         </div>
 
-        <div className="relative z-10 max-w-7xl mx-auto px-4 md:px-8 pt-20 pb-24 md:pt-28 md:pb-32">
+        <div className="relative z-10 mx-auto grid max-w-7xl gap-12 px-4 pb-24 pt-20 md:grid-cols-[1.15fr_0.85fr] md:px-8 md:pb-32 md:pt-28">
           <div className="max-w-3xl">
             <div className="inline-flex items-center gap-2 bg-primary/10 border border-primary/30 text-primary text-xs font-semibold uppercase tracking-widest px-3 py-1.5 rounded mb-6"
               style={{ fontFamily: "'DM Mono', monospace" }}
@@ -757,12 +745,11 @@ export default function App() {
               className="text-5xl md:text-7xl font-black uppercase leading-none tracking-tight mb-6 text-foreground"
               style={{ fontFamily: "'Barlow Condensed', sans-serif" }}
             >
-              Your City. <br />
-              <span className="text-primary">Every Drive.</span>
-              <br /> Sorted.
+              Need help now? <br />
+              <span className="text-primary">Request a mechanic.</span>
             </h1>
             <p className="text-lg text-muted-foreground max-w-xl mb-6 leading-relaxed">
-              Find trusted garages, certified mechanics, transport crews, car hire and bike hire across Nairobi — all in one place.
+              Tell us what happened, share your location, and let PinPoint arrange the next step.
             </p>
             <div className="flex flex-col sm:flex-row sm:items-center gap-3 text-sm text-muted-foreground max-w-xl">
               <div>
@@ -780,16 +767,22 @@ export default function App() {
 
             <div className="mt-6 flex flex-col sm:flex-row gap-3 max-w-xl">
               <button
-                onClick={() => setAuthOpen(true)}
+                onClick={() => setMechanicRequestOpen(true)}
                 className="bg-primary text-white font-bold text-sm uppercase tracking-wider px-6 py-3 rounded hover:bg-[#e04a00] transition-colors"
               >
-                Sign In
+                Request a mechanic
+                            <button
+                              onClick={() => setTransportRequestOpen(true)}
+                              className="border border-primary/50 bg-primary/10 text-primary font-bold text-sm uppercase tracking-wider px-6 py-3 rounded hover:bg-primary/20 transition-colors"
+                            >
+                              Hama na Sisi
+                            </button>
               </button>
               <button
-                onClick={() => setAuthOpen(true)}
+                onClick={() => document.getElementById("services")?.scrollIntoView({ behavior: "smooth" })}
                 className="border border-border bg-background/60 text-foreground font-semibold text-sm px-6 py-3 rounded hover:border-primary/50 transition-colors"
               >
-                Sign Up
+                Browse services
               </button>
             </div>
 
@@ -825,6 +818,13 @@ export default function App() {
               </button>
             </div>
           </div>
+
+          <aside className="mechanic-hero-card mt-2 rounded-xl p-5 md:mt-20 md:p-6">
+            <div className="mb-5 flex items-start justify-between gap-4"><div><p className="portal-kicker">Priority roadside help</p><h2 className="mt-2 text-2xl font-black text-foreground">Get moving again.</h2></div><div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/15 text-primary"><Wrench size={20} /></div></div>
+            <div className="space-y-3 text-sm text-muted-foreground"><p className="flex items-center gap-3"><span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-xs font-black text-white">1</span>Choose breakdown, towing, or onsite repair.</p><p className="flex items-center gap-3"><span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-xs font-black text-white">2</span>Share your vehicle and exact location.</p><p className="flex items-center gap-3"><span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-xs font-black text-white">3</span>Track timing and progress in your dashboard.</p></div>
+            <button onClick={() => setMechanicRequestOpen(true)} className="mt-6 flex w-full items-center justify-center gap-2 rounded bg-primary px-4 py-3 text-sm font-bold uppercase tracking-wider text-white hover:bg-[#e04a00]">Start a request <ArrowRight size={16} /></button>
+            <div className="mt-4 flex items-center gap-2 border-t border-border pt-4 text-xs text-muted-foreground"><Clock size={14} className="text-primary" /> Admin coordinated. Timing confirmed after submission.</div>
+          </aside>
 
           {/* Stats strip */}
           <div className="mt-16 grid grid-cols-2 md:grid-cols-4 gap-px bg-border rounded overflow-hidden max-w-2xl">
@@ -993,7 +993,7 @@ export default function App() {
         )}
 
         {/* ── Mechanics ── */}
-        {activeTab === "mechanics" && (
+        {false && activeTab === "mechanics" && (
           <div>
             {activeMechanics.length ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1286,7 +1286,7 @@ export default function App() {
         />
       )}
 
-      {showPublicHomepage && <>
+      {false && <>
       {/* ── WHY PINPOINT ────────────────────────────────────────────────────── */}
       <section className="bg-secondary border-y border-border py-20">
         <div className="max-w-7xl mx-auto px-4 md:px-8">
@@ -1387,6 +1387,8 @@ export default function App() {
         </div>
       </section>
 
+      </>}
+      {showPublicHomepage && <>
       {/* ── FOOTER ──────────────────────────────────────────────────────────── */}
       <footer className="bg-card border-t border-border pt-14 pb-8">
         <div className="max-w-7xl mx-auto px-4 md:px-8">
@@ -1401,7 +1403,7 @@ export default function App() {
                 </span>
               </div>
               <p className="text-xs text-muted-foreground leading-relaxed mb-4">
-                Connecting drivers, riders, and movers with trusted service providers across the city.
+                Admin-curated roadside help, garages, car hire, and bike hire across Nairobi.
               </p>
               <div className="flex gap-3">
                 <a href={whatsappLink} target="_blank" rel="noreferrer" className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
@@ -1416,7 +1418,7 @@ export default function App() {
             </div>
 
             {[
-              { heading: "Services", links: ["Car Garages", "Specialist Mechanics", "Transport & Moving", "Luggage Delivery", "Car Hire", "Bike Hire"] },
+              { heading: "Services", links: ["Request a Mechanic", "Car Garages", "Car Hire", "Bike Hire"] },
               { heading: "Company", links: ["About Us", "How It Works", "Pricing", "Blog", "Careers", "Press"] },
               { heading: "Support", links: ["Help Centre", "Safety", "Terms of Service", "Privacy Policy", "Contact Us", "Report an Issue"] },
             ].map((col) => (

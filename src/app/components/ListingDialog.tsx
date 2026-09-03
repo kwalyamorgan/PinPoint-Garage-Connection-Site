@@ -43,6 +43,7 @@ export default function ListingDialog({
   initialItem,
   mode = 'create',
   providerContact,
+  allowedServiceTypes,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -50,6 +51,7 @@ export default function ListingDialog({
   initialItem?: any;
   mode?: 'create' | 'edit';
   providerContact?: string;
+  allowedServiceTypes?: ServiceType[];
 }) {
   const [serviceType, setServiceType] = useState<ServiceType>('garage');
   const [vehicleType, setVehicleType] = useState('Lorry');
@@ -57,6 +59,8 @@ export default function ListingDialog({
   const [location, setLocation] = useState('');
   const [phone, setPhone] = useState('');
   const [specialty, setSpecialty] = useState('');
+  const [serviceDetails, setServiceDetails] = useState('');
+  const [requirements, setRequirements] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState('');
@@ -78,6 +82,8 @@ export default function ListingDialog({
     setLocation(initialItem?.location || initialItem?.address || '');
     setPhone(initialItem?.phone || providerContact || '');
     setSpecialty(initialItem?.specialty || '');
+    setServiceDetails(initialItem?.serviceDetails || '');
+    setRequirements(initialItem?.requirements || '');
     setImageUrl(initialItem?.imageUrl || '');
     setImageFile(null);
     setImagePreview(initialItem?.imageUrl || '');
@@ -158,6 +164,9 @@ export default function ListingDialog({
       const basePayload = {
         imageUrl: finalImageUrl,
         description,
+        serviceDetails,
+        requirements,
+        vehicleType: serviceType === 'bike-hire' ? vehicleType : undefined,
         price,
         discount,
         availability,
@@ -239,6 +248,13 @@ export default function ListingDialog({
 
         <form className="grid gap-4" onSubmit={submit}>
           {/* Service Type */}
+          {(serviceType === 'car-hire' || serviceType === 'bike-hire') && (
+            <div>
+              <label className="text-sm font-medium text-muted-foreground">{serviceType === 'bike-hire' ? 'Bike type' : 'Vehicle details'}</label>
+              {serviceType === 'bike-hire' ? <select value={vehicleType} onChange={(e) => setVehicleType(e.target.value)} className="w-full bg-secondary border border-border rounded px-3 py-2 text-foreground"><option value="electric">Electric bike</option><option value="manual">Manual bike</option><option value="motorbike">Motorbike</option></select> : <Input value={vehicleType} onChange={(e) => setVehicleType(e.target.value)} placeholder="SUV, sedan, hatchback, etc." />}
+            </div>
+          )}
+
           <div>
             <label className="text-sm font-medium text-muted-foreground">Service Type</label>
             <select
@@ -247,12 +263,13 @@ export default function ListingDialog({
               disabled={mode === 'edit'}
               className="w-full bg-secondary border border-border rounded px-3 py-2 text-foreground"
             >
-              <option value="garage">Garage</option>
-              <option value="mechanic">Mechanic</option>
-              <option value="transport">Transport</option>
-              <option value="car-hire">Car Hire</option>
-              <option value="bike-hire">Bike Hire</option>
+              {(allowedServiceTypes || ['garage', 'mechanic', 'transport', 'car-hire', 'bike-hire']).map(type => <option key={type} value={type}>{type === 'car-hire' ? 'Car Hire' : type === 'bike-hire' ? 'Bike Hire' : type.charAt(0).toUpperCase() + type.slice(1)}</option>)}
             </select>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-muted-foreground">{serviceType === 'garage' ? 'Services and charges (optional)' : 'Requirements (optional)'}</label>
+            <textarea value={serviceType === 'garage' ? serviceDetails : requirements} onChange={(e) => serviceType === 'garage' ? setServiceDetails(e.target.value) : setRequirements(e.target.value)} className="w-full bg-secondary border border-border rounded px-3 py-2 min-h-[80px] text-foreground" placeholder={serviceType === 'garage' ? 'Oil change - KSh 1,500\nBrake service - price on inspection' : 'ID required, deposit, opening hours, booking requirements'} />
           </div>
 
           {/* Vehicle Type for Transport */}

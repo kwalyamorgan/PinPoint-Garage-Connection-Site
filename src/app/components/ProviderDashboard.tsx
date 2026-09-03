@@ -297,6 +297,11 @@ export default function ProviderDashboard({
                 {activeTab === 'profile' && 'Profile Settings'}
               </h1>
             </div>
+            {user?.role === 'admin' && (
+              <button onClick={onClose} className="rounded border border-border px-3 py-2 text-sm font-semibold text-muted-foreground hover:border-primary hover:text-primary">
+                Back to admin
+              </button>
+            )}
           </div>
 
           {/* Content Area */}

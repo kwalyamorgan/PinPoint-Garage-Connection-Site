@@ -1,36 +1,88 @@
-import { useEffect, useState } from 'react';
-import { BarChart3, Check, CheckCircle, Mail, MessageCircle, Power, RefreshCw, Shield, Users, X } from 'lucide-react';
-import api from '../../lib/api';
+import { useEffect, useState } from "react";
+import {
+  CheckCircle,
+  Clock,
+  LayoutDashboard,
+  ListPlus,
+  LocateFixed,
+  Mail,
+  MessageCircle,
+  RefreshCw,
+  Wrench,
+  X,
+} from "lucide-react";
+import api from "../../lib/api";
+import ListingDialog from "./ListingDialog";
 
-type AdminView = 'overview' | 'customers' | 'providers';
+type AdminView = "requests" | "listings" | "mechanics" | "customers";
+type RequestStatus =
+  | "pending"
+  | "reviewed"
+  | "approved"
+  | "en-route"
+  | "arrived"
+  | "completed"
+  | "rejected";
 
-function whatsappUrl(phone?: string, text = '') {
-  const number = String(phone || '').replace(/\D/g, '');
-  return number ? `https://wa.me/${number}${text ? `?text=${encodeURIComponent(text)}` : ''}` : '';
+const statusLabels: Record<RequestStatus, string> = {
+  pending: "Needs review",
+  reviewed: "Reviewed",
+  approved: "Arrival set",
+  "en-route": "Mechanic en route",
+  arrived: "Mechanic arrived",
+  completed: "Completed",
+  rejected: "Rejected",
+};
+
+function whatsappUrl(phone?: string) {
+  const number = String(phone || "").replace(/\D/g, "");
+  return number ? `https://wa.me/${number}` : "";
 }
 
-function displayName(item: any) {
-  return [item.firstName, item.lastName].filter(Boolean).join(' ') || item.email?.split('@')[0] || 'Unnamed';
+function googleMapsUrl(latitude?: number, longitude?: number) {
+  return latitude && longitude
+    ? `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`
+    : "";
+}
+
+function googleMapsEmbedUrl(latitude?: number, longitude?: number) {
+  return latitude && longitude
+    ? `https://www.google.com/maps?q=${latitude},${longitude}&z=16&output=embed`
+    : "";
 }
 
 export default function AdminDashboard({ auth }: { auth: any }) {
-  const [view, setView] = useState<AdminView>('overview');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [view, setView] = useState<AdminView>("requests");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [requests, setRequests] = useState<any[]>([]);
+  const [listings, setListings] = useState<any[]>([]);
+  const [mechanics, setMechanics] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
-  const [providers, setProviders] = useState<any[]>([]);
-  const [stats, setStats] = useState<any>({});
+  const [listingOpen, setListingOpen] = useState(false);
+  const [selectedListing, setSelectedListing] = useState<any>(null);
+  const [mechanicOpen, setMechanicOpen] = useState(false);
+  const [selectedMechanic, setSelectedMechanic] = useState<any>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
 
   const load = async () => {
     setLoading(true);
-    setError('');
+    setError("");
     try {
-      const data = await api.getAdminDashboard();
-      setCustomers(data.customers || []);
-      setProviders(data.providers || []);
-      setStats(data.stats || {});
+      const [dashboard, garages, mechanicsData, transportData] = await Promise.all([
+        api.getAdminDashboard(),
+        api.fetchGarages(),
+        api.getAdminMechanics(),
+        api.getAdminTransport(),
+      ]);
+      setRequests(dashboard.mechanicRequests || []);
+      setCustomers(dashboard.customers || []);
+      setMechanics(mechanicsData || []);
+      setListings([
+        ...(garages || []).map((item: any) => ({ ...item, type: item.serviceType || "garage" })),
+        ...(transportData || []).map((item: any) => ({ ...item, type: "transport" })),
+      ]);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -39,71 +91,461 @@ export default function AdminDashboard({ auth }: { auth: any }) {
   };
 
   useEffect(() => {
-    if (auth.user?.role === 'admin') load();
+    if (auth.user?.role === "admin") load();
   }, [auth.user]);
 
   const login = async (event: React.FormEvent) => {
     event.preventDefault();
     setLoading(true);
-    setError('');
+    setError("");
     try {
-      const loggedInUser = await auth.login(email, password, true);
-      if (!loggedInUser) setError('Invalid admin credentials');
-      else if (loggedInUser.role !== 'admin') {
-        await auth.logout();
-        setError('This login is for administrators only.');
-      }
+      const user = await auth.login(email, password, true);
+      if (!user) setError("Invalid admin credentials");
     } catch (err) {
-      setError((err as Error).message || 'Unable to sign in');
+      setError((err as Error).message || "Unable to sign in");
     } finally {
       setLoading(false);
     }
   };
 
-  const changeProviderStatus = async (provider: any, change: { approved?: boolean; enabled?: boolean }) => {
+  const updateRequest = async (
+    request: any,
+    data: { status?: string; scheduledAt?: string },
+  ) => {
     try {
-      await api.updateProviderStatus(provider.id, change);
+      await api.updateMechanicRequest(request.id, data);
       await load();
     } catch (err) {
       setError((err as Error).message);
     }
   };
 
-  if (auth.user?.role !== 'admin') {
+  const setArrival = (request: any) => {
+    const input = document.querySelector(
+      `#arrival-${request.id}`,
+    ) as HTMLInputElement | null;
+    if (input?.value)
+      updateRequest(request, { scheduledAt: input.value, status: "approved" });
+  };
+
+  if (auth.user?.role !== "admin")
     return (
-      <main className="min-h-screen bg-background px-4 py-10 text-foreground md:px-8">
-        <div className="mx-auto max-w-md rounded border border-border bg-card p-7 shadow-xl">
-          <div className="mb-8 flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded bg-primary text-white"><Shield size={20} /></div><div><p className="text-xs font-bold uppercase tracking-[0.2em] text-primary">PinPoint</p><h1 className="text-2xl font-black">Admin access</h1></div></div>
-          <p className="mb-6 text-sm text-muted-foreground">This is the private control room for customer and provider management.</p>
-          <form className="grid gap-4" onSubmit={login}>
-            <input value={email} onChange={event => setEmail(event.target.value)} type="email" placeholder="Admin email" required className="rounded border border-border bg-secondary px-3 py-3 text-sm outline-none focus:border-primary" />
-            <input value={password} onChange={event => setPassword(event.target.value)} type="password" placeholder="Password" required className="rounded border border-border bg-secondary px-3 py-3 text-sm outline-none focus:border-primary" />
-            {error && <p className="rounded border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400">{error}</p>}
-            <button disabled={loading} className="flex items-center justify-center gap-2 rounded bg-primary px-4 py-3 text-sm font-bold text-white disabled:opacity-60">{loading && <RefreshCw size={15} className="animate-spin" />} Sign in as admin</button>
-          </form>
-        </div>
+      <main className="min-h-screen bg-background px-4 py-10 text-foreground">
+        <form
+          onSubmit={login}
+          className="mx-auto grid max-w-md gap-4 rounded-xl border border-border bg-card p-7 shadow-xl"
+        >
+          <div>
+            <p className="portal-kicker">PinPoint / secure access</p>
+            <h1 className="mt-1 text-2xl font-black">Admin control room</h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Review mechanic requests and publish service listings.
+            </p>
+          </div>
+          <input
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            type="email"
+            placeholder="Admin email"
+            required
+            className="rounded border border-border bg-secondary px-3 py-3 text-sm"
+          />
+          <input
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            type="password"
+            placeholder="Password"
+            required
+            className="rounded border border-border bg-secondary px-3 py-3 text-sm"
+          />
+          {error && (
+            <p className="rounded bg-red-500/10 px-3 py-2 text-sm text-red-400">
+              {error}
+            </p>
+          )}
+          <button
+            disabled={loading}
+            className="rounded bg-primary px-4 py-3 text-sm font-bold text-white"
+          >
+            {loading ? "Signing in..." : "Sign in as admin"}
+          </button>
+        </form>
       </main>
     );
-  }
 
-  const cards = [
-    { label: 'Customers', value: customers.length, icon: <Users size={18} /> },
-    { label: 'Providers', value: providers.length, icon: <Shield size={18} /> },
-    { label: 'Bookings', value: stats.totalBookings || 0, icon: <BarChart3 size={18} /> },
-    { label: 'Pending bookings', value: stats.pendingBookings || 0, icon: <RefreshCw size={18} /> },
-  ];
+  const pending = requests.filter(
+    (request) => request.status === "pending",
+  ).length;
+  const active = requests.filter(
+    (request) => !["completed", "rejected"].includes(request.status),
+  ).length;
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-border bg-card px-4 py-4 md:px-8"><div className="mx-auto flex max-w-7xl items-center justify-between gap-3"><div className="min-w-0"><p className="text-xs font-bold uppercase tracking-[0.2em] text-primary">PinPoint / private</p><h1 className="text-xl font-black md:text-2xl">Admin dashboard</h1></div><div className="flex shrink-0 items-center gap-2"><button onClick={load} title="Refresh dashboard" className="rounded border border-border p-2 text-muted-foreground hover:border-primary hover:text-primary"><RefreshCw size={17} className={loading ? 'animate-spin' : ''} /></button><button onClick={auth.logout} className="rounded bg-secondary px-3 py-2 text-sm font-semibold">Log out</button></div></div></header>
+      <header className="border-b border-border bg-card px-4 py-4 md:px-8">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
+          <div>
+            <p className="portal-kicker">PinPoint / operations</p>
+            <h1 className="text-xl font-black md:text-2xl">
+              Admin control room
+            </h1>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={load}
+              title="Refresh"
+              className="rounded border border-border p-2 text-muted-foreground hover:border-primary hover:text-primary"
+            >
+              <RefreshCw size={17} className={loading ? "animate-spin" : ""} />
+            </button>
+            <button
+              onClick={auth.logout}
+              className="rounded bg-secondary px-3 py-2 text-sm font-semibold"
+            >
+              Log out
+            </button>
+          </div>
+        </div>
+      </header>
       <main className="mx-auto max-w-7xl px-4 py-6 md:px-8 md:py-10">
-        {error && <div className="mb-5 flex items-start justify-between gap-3 rounded border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300"><span className="min-w-0 break-words">{error}</span><button className="shrink-0" onClick={() => setError('')}><X size={16} /></button></div>}
-        <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">{cards.map(card => <div key={card.label} className="rounded border border-border bg-card p-3 sm:p-4"><div className="mb-3 flex items-start gap-2 text-primary">{card.icon}<span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground sm:text-[11px]">{card.label}</span></div><p className="text-2xl font-black sm:text-3xl">{card.value}</p></div>)}</div>
-        <nav className="mb-6 flex gap-2 overflow-x-auto border-b border-border"><button onClick={() => setView('overview')} className={`whitespace-nowrap border-b-2 px-3 py-3 text-sm font-bold ${view === 'overview' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}>Overview</button><button onClick={() => setView('customers')} className={`whitespace-nowrap border-b-2 px-3 py-3 text-sm font-bold ${view === 'customers' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}>Customers ({customers.length})</button><button onClick={() => setView('providers')} className={`whitespace-nowrap border-b-2 px-3 py-3 text-sm font-bold ${view === 'providers' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}>Providers ({providers.length})</button></nav>
-        {view === 'overview' && <section className="grid gap-5 lg:grid-cols-2"><div className="rounded border border-border bg-card p-5"><h2 className="mb-4 text-lg font-black">Booking activity</h2><div className="grid gap-3 text-center sm:grid-cols-3"><div className="rounded bg-secondary p-4"><p className="text-2xl font-black text-yellow-400">{stats.pendingBookings || 0}</p><p className="mt-1 text-xs text-muted-foreground">Pending</p></div><div className="rounded bg-secondary p-4"><p className="text-2xl font-black text-green-400">{stats.approvedBookings || 0}</p><p className="mt-1 text-xs text-muted-foreground">Approved</p></div><div className="rounded bg-secondary p-4"><p className="text-2xl font-black text-red-400">{stats.rejectedBookings || 0}</p><p className="mt-1 text-xs text-muted-foreground">Rejected</p></div></div></div><div className="rounded border border-border bg-card p-5"><h2 className="mb-2 text-lg font-black">Needs attention</h2><p className="text-sm text-muted-foreground">{providers.filter(provider => !provider.providerApproved).length} provider account(s) are waiting for approval.</p><button onClick={() => setView('providers')} className="mt-5 rounded bg-primary px-4 py-2 text-sm font-bold text-white">Review providers</button></div></section>}
-        {view === 'customers' && <section className="overflow-hidden rounded border border-border bg-card"><div className="border-b border-border p-5"><h2 className="text-xl font-black">Customers</h2><p className="mt-1 text-sm text-muted-foreground">Contact customers and see their booking activity.</p></div><div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead className="bg-secondary text-xs uppercase tracking-wider text-muted-foreground"><tr><th className="px-5 py-3">Customer</th><th className="px-5 py-3">Contact</th><th className="px-5 py-3">Bookings</th><th className="px-5 py-3">Joined</th></tr></thead><tbody>{customers.map(customer => <tr key={customer.id} className="border-t border-border"><td className="px-5 py-4"><p className="font-bold">{displayName(customer)}</p><p className="text-xs text-muted-foreground">{customer.email}</p></td><td className="px-5 py-4"><div className="flex gap-2">{customer.email && <a title="Email customer" href={`mailto:${customer.email}`} className="rounded border border-border p-2 text-primary hover:border-primary"><Mail size={15} /></a>}{customer.phone && <a title="WhatsApp customer" target="_blank" rel="noreferrer" href={whatsappUrl(customer.whatsapp || customer.phone)} className="rounded border border-border p-2 text-green-400 hover:border-green-400"><MessageCircle size={15} /></a>}</div><p className="mt-2 text-xs text-muted-foreground">{customer.phone || 'No phone listed'}</p></td><td className="px-5 py-4 font-bold">{customer.bookingCount || 0}</td><td className="px-5 py-4 text-muted-foreground">{customer.createdAt ? new Date(customer.createdAt).toLocaleDateString() : '-'}</td></tr>)}</tbody></table>{!customers.length && <p className="p-8 text-center text-sm text-muted-foreground">No customers yet.</p>}</div></section>}
-        {view === 'providers' && <section className="overflow-hidden rounded border border-border bg-card"><div className="border-b border-border p-5"><h2 className="text-xl font-black">Providers</h2><p className="mt-1 text-sm text-muted-foreground">Approve new providers before they appear on the public homepage. Disable or enable their visibility at any time.</p></div><div className="overflow-x-auto"><table className="w-full min-w-[980px] text-left text-sm"><thead className="bg-secondary text-xs uppercase tracking-wider text-muted-foreground"><tr><th className="px-5 py-3">Provider</th><th className="px-5 py-3">Status</th><th className="px-5 py-3">Listings</th><th className="px-5 py-3">Bookings</th><th className="px-5 py-3">Contact</th><th className="px-5 py-3">Actions</th></tr></thead><tbody>{providers.map(provider => <tr key={provider.id} className="border-t border-border"><td className="px-5 py-4"><p className="font-bold">{displayName(provider)}</p><p className="text-xs text-muted-foreground">{provider.email}</p><p className="mt-1 text-xs text-muted-foreground">{provider.location || 'Location not listed'}</p></td><td className="px-5 py-4"><div className="flex flex-wrap gap-1 text-[10px] font-bold uppercase"><span className={`rounded px-2 py-1 ${provider.providerApproved ? 'bg-green-500/15 text-green-400' : 'bg-yellow-500/15 text-yellow-400'}`}>{provider.providerApproved ? 'Approved' : 'Pending'}</span>{provider.providerApproved && <span className={`rounded px-2 py-1 ${provider.providerEnabled ? 'bg-green-500/15 text-green-400' : 'bg-red-500/15 text-red-400'}`}>{provider.providerEnabled ? 'Enabled' : 'Disabled'}</span>}</div></td><td className="px-5 py-4 font-bold">{provider.listingCount || 0}</td><td className="px-5 py-4 font-bold">{provider.bookingCount || 0}</td><td className="px-5 py-4"><div className="flex gap-2">{provider.email && <a title="Email provider" href={`mailto:${provider.email}`} className="rounded border border-border p-2 text-primary hover:border-primary"><Mail size={15} /></a>}{(provider.whatsapp || provider.phone) && <a title="WhatsApp provider" target="_blank" rel="noreferrer" href={whatsappUrl(provider.whatsapp || provider.phone)} className="rounded border border-border p-2 text-green-400 hover:border-green-400"><MessageCircle size={15} /></a>}</div></td><td className="px-5 py-4"><div className="flex flex-wrap gap-2">{!provider.providerApproved ? <button onClick={() => changeProviderStatus(provider, { approved: true, enabled: true })} className="flex items-center gap-1 rounded bg-green-600 px-3 py-2 text-xs font-bold text-white"><Check size={14} /> Approve</button> : <button onClick={() => changeProviderStatus(provider, { enabled: !provider.providerEnabled })} className={`flex items-center gap-1 rounded px-3 py-2 text-xs font-bold text-white ${provider.providerEnabled ? 'bg-red-600' : 'bg-green-600'}`}><Power size={14} /> {provider.providerEnabled ? 'Disable' : 'Enable'}</button>}</div></td></tr>)}</tbody></table>{!providers.length && <p className="p-8 text-center text-sm text-muted-foreground">No providers yet.</p>}</div></section>}
+        {error && (
+          <div className="mb-5 flex justify-between rounded border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+            {error}
+            <button onClick={() => setError("")}>
+              <X size={16} />
+            </button>
+          </div>
+        )}
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <div className="portal-surface rounded-xl p-4">
+            <p className="portal-kicker">Needs review</p>
+            <p className="mt-2 text-3xl font-black text-primary">{pending}</p>
+          </div>
+          <div className="portal-surface rounded-xl p-4">
+            <p className="portal-kicker">Active jobs</p>
+            <p className="mt-2 text-3xl font-black">{active}</p>
+          </div>
+          <div className="portal-surface rounded-xl p-4">
+            <p className="portal-kicker">Published listings</p>
+            <p className="mt-2 text-3xl font-black">{listings.length}</p>
+          </div>
+          <div className="portal-surface rounded-xl p-4">
+            <p className="portal-kicker">Customers</p>
+            <p className="mt-2 text-3xl font-black">{customers.length}</p>
+          </div>
+        </div>
+        <nav className="my-6 flex gap-2 overflow-x-auto border-b border-border">
+          <button
+            onClick={() => setView("requests")}
+            className={`flex items-center gap-2 whitespace-nowrap border-b-2 px-3 py-3 text-sm font-bold ${view === "requests" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
+          >
+            <Wrench size={16} />
+            Customer requests
+          </button>
+          <button
+            onClick={() => setView("listings")}
+            className={`flex items-center gap-2 whitespace-nowrap border-b-2 px-3 py-3 text-sm font-bold ${view === "listings" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
+          >
+            <ListPlus size={16} />
+            Service listings
+          </button>
+          <button
+            onClick={() => setView("customers")}
+            className={`flex items-center gap-2 whitespace-nowrap border-b-2 px-3 py-3 text-sm font-bold ${view === "customers" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
+          >
+            <LayoutDashboard size={16} />
+            Customers
+          </button>
+          <button
+            onClick={() => setView("mechanics")}
+            className={`flex items-center gap-2 whitespace-nowrap border-b-2 px-3 py-3 text-sm font-bold ${view === "mechanics" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
+          >
+            <Wrench size={16} />
+            Mechanics (private)
+          </button>
+        </nav>
+        {view === "requests" && (
+          <section className="space-y-4">
+            <div>
+              <p className="portal-kicker">Dispatch queue</p>
+              <h2 className="text-2xl font-black">Review customer requests</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Review customer information, confirm arrival time, then keep
+                progress current.
+              </p>
+            </div>
+            {requests.map((request) => (
+              <article
+                key={request.id}
+                className="portal-surface rounded-xl p-5"
+              >
+                <div className="flex flex-col justify-between gap-4 lg:flex-row">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="font-bold">
+                        {request.customerName || request.customerEmail}
+                      </h3>
+                      <span className="rounded-full bg-primary/15 px-2 py-1 text-[10px] font-bold uppercase text-primary">
+                        {statusLabels[request.status as RequestStatus] ||
+                          request.status}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {request.customerPhone}{" "}
+                      {request.customerWhatsapp &&
+                        `· WhatsApp ${request.customerWhatsapp}`}
+                    </p>
+                    <p className="mt-3 text-xs font-bold uppercase tracking-wider text-primary">
+                      {request.requestService}
+                    </p>
+                    <p className="mt-1 text-sm">{request.description}</p>
+                  </div>
+                  <div className="grid min-w-0 gap-2 text-sm lg:w-[42%]">
+                    <p className="flex items-start gap-2">
+                      <LocateFixed
+                        size={16}
+                        className="mt-0.5 shrink-0 text-primary"
+                      />
+                      <span>
+                        <strong>Location:</strong> {request.requestedLocation}
+                        {googleMapsUrl(
+                          request.locationLatitude,
+                          request.locationLongitude,
+                        ) && (
+                          <a
+                            href={googleMapsUrl(
+                              request.locationLatitude,
+                              request.locationLongitude,
+                            )}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="ml-2 text-primary underline"
+                          >
+                            Open in Google Maps
+                          </a>
+                        )}
+                      </span>
+                    </p>
+                    {googleMapsEmbedUrl(
+                      request.locationLatitude,
+                      request.locationLongitude,
+                    ) && (
+                      <iframe
+                        title="Customer selected location"
+                        src={googleMapsEmbedUrl(
+                          request.locationLatitude,
+                          request.locationLongitude,
+                        )}
+                        className="mt-2 h-40 w-full rounded border border-border"
+                        loading="lazy"
+                      />
+                    )}
+                    <p>
+                      <strong>Vehicle:</strong>{" "}
+                      {[
+                        request.vehicleMake,
+                        request.vehicleModel,
+                        request.vehicleYear,
+                      ]
+                        .filter(Boolean)
+                        .join(" ") || "Not provided"}
+                      {request.licensePlate ? ` · ${request.licensePlate}` : ""}
+                    </p>
+                    <p>
+                      <strong>Requested:</strong>{" "}
+                      {request.dateRequested
+                        ? new Date(request.dateRequested).toLocaleString()
+                        : "-"}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-5 grid gap-3 border-t border-border pt-4 md:grid-cols-[auto_1fr_auto]">
+                  <button
+                    onClick={() =>
+                      updateRequest(request, { status: "reviewed" })
+                    }
+                    disabled={request.status !== "pending"}
+                    className="flex items-center justify-center gap-2 rounded border border-primary px-3 py-2 text-sm font-bold text-primary disabled:opacity-40"
+                  >
+                    <CheckCircle size={16} />
+                    Mark reviewed
+                  </button>
+                  <input
+                    id={`arrival-${request.id}`}
+                    type="datetime-local"
+                    defaultValue={
+                      request.scheduledAt
+                        ? String(request.scheduledAt).slice(0, 16)
+                        : ""
+                    }
+                    className="rounded border border-border bg-secondary px-3 py-2 text-sm"
+                  />
+                  <button
+                    onClick={() => setArrival(request)}
+                    className="rounded bg-primary px-3 py-2 text-sm font-bold text-white"
+                  >
+                    Set arrival time
+                  </button>
+                </div>
+              </article>
+            ))}
+            {!requests.length && (
+              <div className="portal-surface rounded-xl p-10 text-center text-sm text-muted-foreground">
+                No mechanic requests yet.
+              </div>
+            )}
+          </section>
+        )}
+        {view === "listings" && (
+          <section>
+            <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+              <div>
+                <p className="portal-kicker">Admin catalog</p>
+                <h2 className="text-2xl font-black">
+                  Publish service listings
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Garages, car hire, and bike hire are managed here.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setSelectedListing(null);
+                  setListingOpen(true);
+                }}
+                className="flex items-center justify-center gap-2 rounded bg-primary px-4 py-3 text-sm font-bold text-white"
+              >
+                <ListPlus size={17} />
+                Upload listing
+              </button>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {listings.map((listing) => (
+                <article
+                  key={listing.id}
+                  className="portal-surface rounded-xl p-4"
+                >
+                  <p className="portal-kicker">{listing.type}</p>
+                  <h3 className="mt-1 font-bold">
+                    {listing.name || listing.company}
+                  </h3>
+                  <p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+                    <LocateFixed size={14} />
+                    {listing.location || listing.address || "Location not set"}
+                  </p>
+                  <p className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
+                    <Clock size={14} />
+                    {listing.availability || "Availability not set"}
+                  </p>
+                  {listing.type === "transport" && (
+                    <p className="mt-1 text-sm text-muted-foreground">Contact: {listing.phone || "Not provided"}</p>
+                  )}
+                  <button
+                    onClick={() => {
+                      setSelectedListing(listing);
+                      setListingOpen(true);
+                    }}
+                    className="mt-4 w-full rounded border border-primary px-3 py-2 text-sm font-semibold text-primary"
+                  >
+                    Edit listing
+                  </button>
+                </article>
+              ))}
+            </div>
+            {!listings.length && (
+              <div className="portal-surface rounded-xl p-10 text-center text-sm text-muted-foreground">
+                No listings published yet. Upload the first garage, car hire, or
+                bike hire listing.
+              </div>
+            )}
+          </section>
+        )}
+        {view === "mechanics" && (
+          <section>
+            <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+              <div><p className="portal-kicker">Private directory</p><h2 className="text-2xl font-black">Mechanics</h2><p className="mt-1 text-sm text-muted-foreground">Only admin can view and manage mechanic details.</p></div>
+              <button onClick={() => { setSelectedMechanic(null); setMechanicOpen(true); }} className="flex items-center justify-center gap-2 rounded bg-primary px-4 py-3 text-sm font-bold text-white"><ListPlus size={17} />Add mechanic</button>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">{mechanics.map(mechanic => <article key={mechanic.id} className="portal-surface rounded-xl p-4"><p className="portal-kicker">{mechanic.specialty || 'General repairs'}</p><h3 className="mt-1 font-bold">{mechanic.name}</h3><p className="mt-2 text-sm text-muted-foreground">Contact: {mechanic.phone || 'Not provided'}</p><p className="text-sm text-muted-foreground">Garage: {mechanic.garageId || 'Independent'}</p><p className="text-sm text-muted-foreground">Location: {mechanic.location || 'Not provided'}</p><p className="mt-2 text-sm text-muted-foreground">{mechanic.description || 'No service details added.'}</p><button onClick={() => { setSelectedMechanic(mechanic); setMechanicOpen(true); }} className="mt-4 w-full rounded border border-primary px-3 py-2 text-sm font-semibold text-primary">Edit mechanic</button></article>)}</div>
+            {!mechanics.length && <div className="portal-surface rounded-xl p-10 text-center text-sm text-muted-foreground">No mechanics added yet.</div>}
+          </section>
+        )}
+        {view === "customers" && (
+          <section className="portal-surface overflow-hidden rounded-xl">
+            <div className="border-b border-border p-5">
+              <p className="portal-kicker">Customer directory</p>
+              <h2 className="mt-1 text-2xl font-black">Customers</h2>
+            </div>
+            <div className="divide-y divide-border">
+              {customers.map((customer) => (
+                <div
+                  key={customer.id}
+                  className="flex flex-col justify-between gap-3 p-5 sm:flex-row sm:items-center"
+                >
+                  <div>
+                    <p className="font-bold">
+                      {[customer.firstName, customer.lastName]
+                        .filter(Boolean)
+                        .join(" ") || customer.email}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {customer.email}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    {customer.email && (
+                      <a
+                        href={`mailto:${customer.email}`}
+                        title="Email customer"
+                        className="rounded border border-border p-2 text-primary"
+                      >
+                        <Mail size={16} />
+                      </a>
+                    )}
+                    {customer.phone && (
+                      <a
+                        href={whatsappUrl(customer.whatsapp || customer.phone)}
+                        target="_blank"
+                        rel="noreferrer"
+                        title="WhatsApp customer"
+                        className="rounded border border-border p-2 text-green-500"
+                      >
+                        <MessageCircle size={16} />
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {!customers.length && (
+                <p className="p-8 text-center text-sm text-muted-foreground">
+                  No customers yet.
+                </p>
+              )}
+            </div>
+          </section>
+        )}
       </main>
+      <ListingDialog
+        open={listingOpen}
+        onOpenChange={setListingOpen}
+        initialItem={selectedListing}
+        mode={selectedListing ? "edit" : "create"}
+        providerContact={auth.user?.email}
+        allowedServiceTypes={["garage", "car-hire", "bike-hire"]}
+        onSaved={() => {
+          setListingOpen(false);
+          setSelectedListing(null);
+          load();
+        }}
+      />
+      <ListingDialog
+        open={mechanicOpen}
+        onOpenChange={setMechanicOpen}
+        initialItem={selectedMechanic ? { ...selectedMechanic, serviceType: "mechanic" } : { serviceType: "mechanic" }}
+        mode={selectedMechanic ? "edit" : "create"}
+        allowedServiceTypes={["mechanic"]}
+        onSaved={() => { setMechanicOpen(false); setSelectedMechanic(null); load(); }}
+      />
     </div>
   );
 }

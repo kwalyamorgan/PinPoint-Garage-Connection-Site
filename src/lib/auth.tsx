@@ -31,12 +31,12 @@ export function useAuth() {
 
   async function register(email: string, password: string, role = 'user') {
     const r = await api.register(email, password, role);
-    if (r && r.ok && r.success) return { ok: true as const };
     if (r && r.user) {
       const meRes = await api.me();
       setUser(meRes.user ?? null);
       return { ok: true as const };
     }
+    if (r && r.ok && r.success) return { ok: true as const };
     return { ok: false as const, error: r?.error || 'Registration failed', status: r?.status };
   }
 
